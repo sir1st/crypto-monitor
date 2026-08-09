@@ -1,0 +1,43 @@
+{
+  "_comment": [
+    "Copy to accounts_config.json and edit. Your copy is gitignored.",
+    "",
+    "api_key_env / api_secret_env hold the NAMES of environment variables, not the",
+    "keys themselves. Put the actual keys in .env under those names. This keeps",
+    "credentials out of this file entirely.",
+    "",
+    "position_usdt is the margin committed per trade for this account, in USDT.",
+    "With leverage 40 and position_usdt 15, the notional is 15 * 40 = 600 USDT.",
+    "Every enabled account trades the same signal, sized by its own settings."
+  ],
+
+  "accounts": [
+    {
+      "name": "testnet",
+      "api_key_env": "BYBIT_TESTNET_API_KEY",
+      "api_secret_env": "BYBIT_TESTNET_API_SECRET",
+      "enabled": true,
+      "position_usdt": 5,
+      "leverage": 10
+    },
+    {
+      "name": "main",
+      "api_key_env": "BYBIT_API_KEY",
+      "api_secret_env": "BYBIT_API_SECRET",
+      "enabled": false,
+      "position_usdt": 10,
+      "leverage": 10
+    },
+    {
+      "name": "second",
+      "api_key_env": "BYBIT_API_KEY_2",
+      "api_secret_env": "BYBIT_API_SECRET_2",
+      "enabled": false,
+      "position_usdt": 10,
+      "leverage": 10
+    }
+  ],
+
+  "trading_symbol": "BTCUSDT",
+  "parallel_execution": true
+}

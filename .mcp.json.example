@@ -1,0 +1,16 @@
+{
+  "$comment": [
+    "Copy to .mcp.json so Claude Code picks up the tools.",
+    "The Vale server must be running (npm run dev) — the MCP server calls its HTTP API.",
+    "No credential is needed: the API is unauthenticated."
+  ],
+  "mcpServers": {
+    "vale-monitor": {
+      "command": "npx",
+      "args": ["tsx", "server/mcp/index.ts"],
+      "env": {
+        "VALE_API_URL": "http://127.0.0.1:5000"
+      }
+    }
+  }
+}

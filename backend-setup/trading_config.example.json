@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "Copy to trading_config.json and edit. Your copy is gitignored.",
+    "",
+    "These are conservative starting values, not a recommendation. Read the",
+    "Configuration section of README.md before changing anything, and run on",
+    "testnet until the behaviour is what you expect."
+  ],
+
+  "auto_mode": false,
+
+  "take_profit_enabled": true,
+  "take_profit_mode": "simple",
+
+  "simple_tp_levels": [
+    { "profit_pct": 2.0, "size_pct": 25 },
+    { "profit_pct": 5.0, "size_pct": 25 },
+    { "profit_pct": 10.0, "size_pct": 25 }
+  ],
+
+  "strategic_tp_levels": [
+    { "profit_pct": 50.0, "size_pct": 50 },
+    { "profit_pct": 100.0, "size_pct": 50 }
+  ],
+
+  "trailing_stop": {
+    "enabled": true,
+    "target_roi_pct": 30,
+    "callback_rate": 10,
+    "check_interval_minutes": 5
+  },
+
+  "skip_signals_for_open_positions": true,
+  "enforce_highest_timeframe_trend": true,
+  "signal_strength_threshold": 60,
+
+  "trading_pairs": ["BTCUSDT"],
+
+  "trading_filters": {
+    "enabled": true,
+    "min_signal_strength": "Moderate",
+    "allow_counter_trend": false,
+    "require_confirmation": true,
+    "minimum_volume": 0
+  },
+
+  "symbol_config": {
+    "BTCUSDT": {
+      "leverage": 10,
+      "position_usdt": 5
+    }
+  },
+
+  "pnl_history_file": "pnl_history.json",
+  "max_history_entries": 100
+}

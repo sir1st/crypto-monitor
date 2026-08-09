@@ -1,0 +1,44 @@
+# Local config and state for the trading bot. Nothing in this list should ever
+# be committed — it is either a credential, a private account detail, or live
+# runtime state that is meaningless on another machine.
+#
+# Each ignored config has a committed `*.example.json` next to it. Copy the
+# example, then edit your copy.
+
+# --- Credentials -----------------------------------------------------------
+.env
+.env.local
+
+# --- Private configuration -------------------------------------------------
+# Account names, per-account position sizes and leverage.
+accounts_config.json
+# Live risk parameters: TP/SL ladders, position sizing, filters.
+trading_config.json
+
+# --- Runtime state ---------------------------------------------------------
+# Written by the bot while running. Regenerated automatically.
+all_trade_signals.json
+pending_signals.json
+pending_signals_backup.json
+session_state.json
+stream_data.json
+trading_decision_history.json
+# Live stop-loss levels and real fill prices.
+tpsl.json
+# Trade history and martingale ladder state.
+martingale_log.json
+pnl_history.json
+
+# --- Logs ------------------------------------------------------------------
+*.log
+*_log.txt
+telegram_bot.log
+tpsl_monitor.log
+trade_manager_log.txt
+
+# --- Backups and caches ----------------------------------------------------
+backups/
+__pycache__/
+*.py[cod]
+.venv/
+venv/

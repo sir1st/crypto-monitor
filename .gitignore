@@ -1,0 +1,45 @@
+node_modules
+dist
+build
+
+# Secrets — never commit. Copy .env.example to .env and fill it in.
+.env
+.env.local
+.env.*.local
+
+# Local SQLite database and its write-ahead log
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Drizzle output
+migrations/
+
+.DS_Store
+*.log
+*.tar.gz
+
+# Local MCP config may contain an API token
+.mcp.json
+
+# Trading bot private config — also declared in "backend-setup/.gitignore".
+# Duplicated here so removing that file cannot expose them.
+accounts_config.json
+trading_config.json
+tpsl.json
+martingale_log.json
+pnl_history.json
+session_state.json
+pending_signals*.json
+all_trade_signals.json
+stream_data.json
+trading_decision_history.json
+*_log.txt
+__pycache__/
+*.py[cod]
+.venv/
+
+# Claude Code local state (settings.local.json, transcripts, caches).
+# CLAUDE.md is intentionally tracked and is NOT matched by this.
+.claude/

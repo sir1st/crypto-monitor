@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Self-hosted multi-account Bybit trading monitor with candles, alerts and strategies">
+  <meta name="theme-color" content="#ffc107">
+  <title>Vale Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --background: 222.2 47.4% 11.2%;
+      --foreground: 210 40% 98%;
+      
+      --primary: 37 100% 50%; /* Gold */
+      --primary-foreground: 222.2 47.4% 11.2%;
+      
+      --secondary: 196 100% 42%; /* Blue */
+      --secondary-foreground: 210 40% 98%;
+      
+      --card: 222.2 47.4% 13.5%;
+      --card-foreground: 210 40% 98%;
+      
+      --popover: 222.2 47.4% 11.2%;
+      --popover-foreground: 210 40% 98%;
+      
+      --muted: 217.2 32.6% 17.5%;
+      --muted-foreground: 215 20.2% 65.1%;
+      
+      --accent: 217.2 32.6% 19.5%;
+      --accent-foreground: 210 40% 98%;
+      
+      --destructive: 0 62.8% 30.6%;
+      --destructive-foreground: 210 40% 98%;
+      
+      --border: 217.2 32.6% 20.5%;
+      --input: 217.2 32.6% 17.5%;
+      --ring: 196 100% 42%;
+      
+      --success: 142 76% 36%;
+      --success-foreground: 210 40% 98%;
+
+      --warning: 38 92% 50%;
+      --warning-foreground: 222.2 47.4% 11.2%;
+
+      --radius: 0.75rem;
+      
+      /* Animation variables */
+      --animation-duration: 0.3s;
+      --animation-timing: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Smooth transitions for theme changes */
+    * {
+      transition: background-color var(--animation-duration) var(--animation-timing),
+                  border-color var(--animation-duration) var(--animation-timing),
+                  color var(--animation-duration) var(--animation-timing),
+                  box-shadow var(--animation-duration) var(--animation-timing);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

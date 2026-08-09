@@ -1,0 +1,14 @@
+# Third-party packages imported by the scripts in this directory.
+# Install with:  pip install -r requirements.txt
+#
+# Versions are unpinned because this was not previously tracked; pin them with
+# `pip freeze > requirements.lock.txt` once you have a working environment.
+
+pybit            # Bybit v5 REST + WebSocket client
+python-dotenv    # loads .env
+requests         # Telegram API calls and misc HTTP
+pandas           # candle/indicator dataframes
+numpy            # indicator maths
+psutil           # process monitoring in trading_watchdog.py
+watchdog         # filesystem watching
+openai           # LLM analysis (also used for OpenRouter via base_url)
