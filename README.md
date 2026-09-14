@@ -482,6 +482,7 @@ Full endpoint and WebSocket reference: **[docs/API.md](docs/API.md)**.
   acceptable — the server is reachable only from your own machine. The app logs a
   warning if you bind it anywhere else. Before exposing it, put a reverse proxy
   with TLS **and** access control in front; do not simply set `HOST=0.0.0.0`.
+- For exposing the service on a public cloud server, refer to the **[ECS & Cloudflare Tunnel Security Guide](docs/DEPLOYMENT_SECURITY.md)**.
 - Use **read-only** exchange API keys. Nothing here needs trade permissions, and
   a leaked read-only key cannot move funds.
 - Exchange credentials are stored **unencrypted** in the local SQLite file.
