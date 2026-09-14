@@ -51,6 +51,7 @@ interface PositionResponse extends Array<{
 export default function BybitApiStatus() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<string>('status');
+  const [selectedExchange, setSelectedExchange] = useState<string>('bybit');
 
   // Query for API connection test
   const { 
@@ -60,7 +61,11 @@ export default function BybitApiStatus() {
     error: testError,
     refetch: refetchTest
   } = useQuery<ApiConnectionResponse>({
-    queryKey: ['/api/bybit/test'],
+    queryKey: ['/api/exchange/test', selectedExchange],
+    queryFn: async () => {
+      const res = await fetch(`/api/exchange/test?exchange=${selectedExchange}`);
+      return res.json();
+    },
     refetchOnWindowFocus: false,
   });
 
@@ -72,9 +77,8 @@ export default function BybitApiStatus() {
     error: walletError,
     refetch: refetchWallet
   } = useQuery<WalletResponse>({
-    queryKey: ['/api/bybit/wallet'],
+    queryKey: ['/api/exchange/wallet'],
     refetchOnWindowFocus: false,
-    enabled: apiStatus?.success === true, // Only fetch if API test was successful
   });
 
   // Query for positions data
@@ -85,9 +89,8 @@ export default function BybitApiStatus() {
     error: positionsError,
     refetch: refetchPositions
   } = useQuery<PositionResponse>({
-    queryKey: ['/api/bybit/positions'],
+    queryKey: ['/api/exchange/positions'],
     refetchOnWindowFocus: false,
-    enabled: apiStatus?.success === true, // Only fetch if API test was successful
   });
 
   // Format the timestamp from server
@@ -104,7 +107,7 @@ export default function BybitApiStatus() {
     
     toast({
       title: "Refreshing data",
-      description: "Fetching the latest data from Bybit...",
+      description: `Testing ${selectedExchange.toUpperCase()} connection and fetching latest data...`,
     });
   };
 
@@ -112,7 +115,20 @@ export default function BybitApiStatus() {
     <Card className="w-full">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold">Bybit API Connection</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-lg font-semibold">Exchange API Status</CardTitle>
+            <select
+              value={selectedExchange}
+              onChange={(e) => setSelectedExchange(e.target.value)}
+              className="text-xs bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white cursor-pointer"
+            >
+              <option value="bybit">Bybit</option>
+              <option value="binance">Binance</option>
+              <option value="okx">OKX</option>
+              <option value="bitget">Bitget</option>
+              <option value="gate">Gate.io</option>
+            </select>
+          </div>
           {apiStatus?.success ? (
             <Badge className="bg-emerald-500">Connected</Badge>
           ) : (
@@ -122,7 +138,7 @@ export default function BybitApiStatus() {
           )}
         </div>
         <CardDescription>
-          Test and verify Bybit API connection
+          Test and verify exchange API connectivity
         </CardDescription>
       </CardHeader>
       

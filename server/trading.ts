@@ -1,9 +1,14 @@
 import { storage } from "./storage";
-import { getClosedPnL, getPositions, getWalletBalance, type Credentials } from "./bybit-api";
+import {
+  getExchangePositions,
+  getExchangeWalletBalance,
+  getExchangeClosedPnL,
+} from "./exchanges/manager";
+import type { ExchangeCredentials, StandardPosition } from "./exchanges/types";
 import type { Account } from "@shared/schema";
 
 /**
- * Multi-account analytics over Bybit data.
+ * Multi-account analytics over multi-exchange data (Bybit, Binance, OKX, Bitget, Gate).
  *
  * Two conventions run through everything here:
  *
@@ -30,8 +35,12 @@ function ratio(winPnl: number, lossPnl: number): number | null {
   return lossPnl !== 0 ? round2(Math.abs(winPnl / lossPnl)) : null;
 }
 
-function credentialsFor(account: Account): Credentials {
-  return { apiKey: account.apiKey, apiSecret: account.apiSecret };
+function credentialsFor(account: Account): ExchangeCredentials {
+  return {
+    apiKey: account.apiKey,
+    apiSecret: account.apiSecret,
+    passphrase: account.passphrase,
+  };
 }
 
 export function weekBoundaries(reference = new Date()) {
@@ -78,25 +87,34 @@ function marginOf(trade: ClosedTrade): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Positions across every configured account. Falls back to the environment
- * credentials only when no account rows exist at all.
+ * Positions across every configured account from all supported exchanges.
+ * Falls back to environment credentials if no accounts configured.
  */
-export async function aggregatePositions(category: "linear" | "inverse" = "linear") {
+export async function aggregatePositions(_category: "linear" | "inverse" = "linear"): Promise<StandardPosition[]> {
   const accounts = await storage.getTradableAccounts();
-  const positions: Array<Record<string, unknown>> = [];
+  const positions: StandardPosition[] = [];
 
   for (const account of accounts) {
-    const list = await getPositions(category, credentialsFor(account));
-    for (const position of list ?? []) {
-      positions.push({ ...position, accountName: account.name });
-    }
+    const list = await getExchangePositions(
+      account.exchange,
+      credentialsFor(account),
+      account.name,
+      account.id,
+    );
+    positions.push(...list);
   }
 
+  // Fallback to Bybit environment credentials if no DB accounts
   if (accounts.length === 0 && process.env.BYBIT_API_KEY && process.env.BYBIT_API_SECRET) {
-    const list = await getPositions(category);
-    for (const position of list ?? []) {
-      positions.push({ ...position, accountName: "Environment" });
-    }
+    const list = await getExchangePositions(
+      "bybit",
+      {
+        apiKey: process.env.BYBIT_API_KEY,
+        apiSecret: process.env.BYBIT_API_SECRET,
+      },
+      "Environment",
+    );
+    positions.push(...list);
   }
 
   return positions;
@@ -107,16 +125,38 @@ export async function aggregateWalletBalances() {
   const balances: Array<Record<string, unknown>> = [];
 
   for (const account of accounts) {
-    const result = await getWalletBalance(credentialsFor(account));
-    for (const entry of result?.list ?? []) {
-      balances.push({ ...entry, accountName: account.name, accountId: account.id });
+    const wallet = await getExchangeWalletBalance(
+      account.exchange,
+      credentialsFor(account),
+      account.name,
+      account.id,
+    );
+    if (wallet) {
+      balances.push({
+        ...wallet,
+        // Compatibility properties for UI components expecting Bybit style fields
+        totalAvailableBalance: String(wallet.totalWalletBalance),
+        accountType: wallet.accountType ?? "UNIFIED",
+      });
     }
   }
 
+  // Fallback to Bybit environment credentials if no DB accounts
   if (accounts.length === 0 && process.env.BYBIT_API_KEY && process.env.BYBIT_API_SECRET) {
-    const result = await getWalletBalance();
-    for (const entry of result?.list ?? []) {
-      balances.push({ ...entry, accountName: "Environment" });
+    const wallet = await getExchangeWalletBalance(
+      "bybit",
+      {
+        apiKey: process.env.BYBIT_API_KEY,
+        apiSecret: process.env.BYBIT_API_SECRET,
+      },
+      "Environment",
+    );
+    if (wallet) {
+      balances.push({
+        ...wallet,
+        totalAvailableBalance: String(wallet.totalWalletBalance),
+        accountType: "UNIFIED",
+      });
     }
   }
 
@@ -129,6 +169,7 @@ export async function aggregateWalletBalances() {
 
 export interface TradingReport {
   accountName: string;
+  exchange?: string;
   timeframe: string;
   totalROI: number;
   totalPnL: number;
@@ -152,8 +193,7 @@ export async function buildTradingReports(timeframeDays = 7): Promise<TradingRep
   const reports: TradingReport[] = [];
 
   for (const account of accounts) {
-    const result = await getClosedPnL({
-      credentials: credentialsFor(account),
+    const trades = await getExchangeClosedPnL(account.exchange, credentialsFor(account), {
       limit: MAX_TRADES_PER_QUERY,
       startTime: cutoff.getTime(),
     });
@@ -167,7 +207,7 @@ export async function buildTradingReports(timeframeDays = 7): Promise<TradingRep
     let winCount = 0;
     let lossCount = 0;
 
-    for (const trade of (result?.list ?? []) as ClosedTrade[]) {
+    for (const trade of trades as ClosedTrade[]) {
       if (Number(trade.createdTime ?? 0) < cutoff.getTime()) continue;
 
       const pnl = Number(trade.closedPnl ?? "0");
@@ -187,9 +227,10 @@ export async function buildTradingReports(timeframeDays = 7): Promise<TradingRep
       }
     }
 
-    const trades = winCount + lossCount;
+    const tradeCount = winCount + lossCount;
     reports.push({
       accountName: account.name,
+      exchange: account.exchange,
       timeframe: label,
       totalROI: totalMargin > 0 ? round2((totalPnL / totalMargin) * 100) : 0,
       totalPnL: round2(totalPnL),
@@ -199,7 +240,7 @@ export async function buildTradingReports(timeframeDays = 7): Promise<TradingRep
       lossPnL: round2(lossPnL),
       winCount,
       lossCount,
-      winRate: trades > 0 ? round2((winCount / trades) * 100) : 0,
+      winRate: tradeCount > 0 ? round2((winCount / tradeCount) * 100) : 0,
       pnlRatio: ratio(winPnL, lossPnL),
     });
   }
@@ -231,14 +272,12 @@ export async function buildTrophyStats(): Promise<TrophyStats> {
   let totalWeeklyTrades = 0;
 
   for (const account of accounts) {
-    const result = await getClosedPnL({
-      credentials: credentialsFor(account),
+    const trades = await getExchangeClosedPnL(account.exchange, credentialsFor(account), {
       limit: MAX_TRADES_PER_QUERY,
       startTime: start.getTime(),
-      endTime: end.getTime(),
     });
 
-    for (const trade of (result?.list ?? []) as ClosedTrade[]) {
+    for (const trade of trades as ClosedTrade[]) {
       const openedAt = Number(trade.createdTime ?? 0);
       if (openedAt < start.getTime() || openedAt > end.getTime()) continue;
 
@@ -360,6 +399,7 @@ function summarisePeriod(trades: ClosedTrade[]): PeriodTotals {
 
 export interface AccountBalanceReport {
   accountName: string;
+  exchange?: string;
   currentEquity: number;
   walletBalance: number;
   unrealizedPnl: number;
@@ -394,8 +434,7 @@ export interface AccountBalanceReport {
 
 /**
  * Equity, derived historical balances, and performance for the last 7 days and
- * the current week. Historical balances are back-derived from realised P&L
- * rather than stored as snapshots.
+ * the current week across all configured exchanges.
  */
 export async function buildAccountBalanceReports(): Promise<AccountBalanceReport[]> {
   const accounts = await storage.getTradableAccounts();
@@ -406,35 +445,38 @@ export async function buildAccountBalanceReports(): Promise<AccountBalanceReport
   for (const account of accounts) {
     const credentials = credentialsFor(account);
 
-    const balance = await getWalletBalance(credentials);
-    const summary = balance?.list?.[0];
-    if (!summary) continue;
+    const wallet = await getExchangeWalletBalance(
+      account.exchange,
+      credentials,
+      account.name,
+      account.id,
+    );
+    if (!wallet) continue;
 
-    const currentEquity = Number(summary.totalEquity ?? "0");
-    const walletBalance = Number(summary.totalWalletBalance ?? "0");
-    const unrealizedPnl = Number(summary.totalPerpUPL ?? "0");
+    const currentEquity = wallet.totalEquity;
+    const walletBalance = wallet.totalWalletBalance;
+    const unrealizedPnl = wallet.totalPerpUPL;
 
-    const [sevenDayResult, weeklyResult] = await Promise.all([
-      getClosedPnL({
-        credentials,
+    const [sevenDayTrades, weeklyTrades] = await Promise.all([
+      getExchangeClosedPnL(account.exchange, credentials, {
         limit: MAX_TRADES_PER_QUERY,
         startTime: sevenDaysAgo.getTime(),
       }),
-      getClosedPnL({
-        credentials,
+      getExchangeClosedPnL(account.exchange, credentials, {
         limit: MAX_TRADES_PER_QUERY,
         startTime: weekStart.getTime(),
       }),
     ]);
 
-    const last7Days = summarisePeriod((sevenDayResult?.list ?? []) as ClosedTrade[]);
-    const thisWeek = summarisePeriod((weeklyResult?.list ?? []) as ClosedTrade[]);
+    const last7Days = summarisePeriod(sevenDayTrades as ClosedTrade[]);
+    const thisWeek = summarisePeriod(weeklyTrades as ClosedTrade[]);
 
     const balance7DaysAgo = walletBalance - last7Days.pnl;
     const balanceWeekStart = currentEquity - thisWeek.pnl;
 
     reports.push({
       accountName: account.name,
+      exchange: account.exchange,
       currentEquity: round2(currentEquity),
       walletBalance: round2(walletBalance),
       unrealizedPnl: round2(unrealizedPnl),
@@ -472,12 +514,12 @@ export async function buildAccountBalanceReports(): Promise<AccountBalanceReport
       },
       symbols7d: last7Days.symbols,
       weeklySymbols: thisWeek.symbols,
-      coinBreakdown: (summary.coin ?? [])
-        .filter((coin) => Number(coin.usdValue ?? "0") > 1)
-        .map((coin) => ({
-          coin: coin.coin,
-          walletBalance: round2(Number(coin.walletBalance ?? "0")),
-          usdValue: round2(Number(coin.usdValue ?? "0")),
+      coinBreakdown: wallet.coin
+        .filter((c) => c.usdValue > 1 || c.walletBalance > 0.001)
+        .map((c) => ({
+          coin: c.coin,
+          walletBalance: round2(c.walletBalance),
+          usdValue: round2(c.usdValue),
         }))
         .sort((a, b) => b.usdValue - a.usdValue),
     });

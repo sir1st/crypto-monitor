@@ -27,6 +27,7 @@
     "axios": "^1.8.4",
     "better-sqlite3": "^12.11.1",
     "bybit-api": "^4.0.1",
+    "ccxt": "^4.5.78",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "cross-env": "^10.0.0",

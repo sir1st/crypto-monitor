@@ -12,12 +12,16 @@ import { z } from "zod";
 
 const now = () => new Date();
 
+export const SUPPORTED_EXCHANGES = ["bybit", "binance", "okx", "bitget", "gate"] as const;
+export type SupportedExchange = (typeof SUPPORTED_EXCHANGES)[number];
+
 export const accounts = sqliteTable("accounts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
-  exchange: text("exchange").notNull(), // "bybit"
+  exchange: text("exchange").notNull(), // "bybit" | "binance" | "okx" | "bitget" | "gate"
   apiKey: text("api_key").notNull(),
   apiSecret: text("api_secret").notNull(),
+  passphrase: text("passphrase"), // Required for OKX and Bitget
   status: text("status").default("active").notNull(), // "active" | "inactive"
   lastSync: integer("last_sync", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(now).notNull(),
@@ -52,13 +56,19 @@ export const strategies = sqliteTable("strategies", {
 // Insert schemas
 // ---------------------------------------------------------------------------
 
-export const insertAccountSchema = createInsertSchema(accounts).pick({
-  name: true,
-  exchange: true,
-  apiKey: true,
-  apiSecret: true,
-  status: true,
-});
+export const insertAccountSchema = createInsertSchema(accounts)
+  .pick({
+    name: true,
+    exchange: true,
+    apiKey: true,
+    apiSecret: true,
+    passphrase: true,
+    status: true,
+  })
+  .extend({
+    exchange: z.enum(SUPPORTED_EXCHANGES),
+    passphrase: z.string().optional(),
+  });
 
 export const insertAlertSchema = createInsertSchema(alerts)
   .pick({ note: true })

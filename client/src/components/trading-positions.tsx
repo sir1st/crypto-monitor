@@ -38,6 +38,7 @@ interface Position {
   cumRealisedPnl: string;
   updatedTime: string;
   accountName?: string;
+  exchange?: string;
 }
 
 export default function TradingPositions() {
@@ -53,9 +54,9 @@ export default function TradingPositions() {
     },
   });
 
-  // For now, use the main API endpoint which works with environment credentials
+  // Query positions across all configured exchange accounts
   const { data: positions = [], isLoading: positionsLoading, error, refetch } = useQuery<Position[]>({
-    queryKey: ['/api/bybit/positions', refreshKey],
+    queryKey: ['/api/exchange/positions', refreshKey],
     refetchInterval: 5000, // Refresh every 5 seconds
     staleTime: 1000,
   });
@@ -337,9 +338,20 @@ export default function TradingPositions() {
                       </Badge>
                     </div>
 
-                    {/* Account Badge */}
-                    <div className="flex justify-end">
-                      <div className="text-xs text-[#00b4d8] bg-[#00b4d8]/20 px-2 py-1 rounded-full border border-[#00b4d8]/30">
+                    {/* Account & Exchange Badge */}
+                    <div className="flex items-center justify-between gap-1">
+                      {position.exchange ? (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase border ${
+                          position.exchange.toLowerCase() === 'binance' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+                          position.exchange.toLowerCase() === 'okx' ? 'bg-white/10 text-white border-white/20' :
+                          position.exchange.toLowerCase() === 'bitget' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' :
+                          position.exchange.toLowerCase() === 'gate' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                          'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                        }`}>
+                          {position.exchange}
+                        </span>
+                      ) : <span />}
+                      <div className="text-xs text-[#00b4d8] bg-[#00b4d8]/20 px-2 py-0.5 rounded-full border border-[#00b4d8]/30 truncate max-w-[120px]">
                         {position.accountName || 'Main Account'}
                       </div>
                     </div>

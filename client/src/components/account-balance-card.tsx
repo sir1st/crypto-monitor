@@ -43,6 +43,7 @@ interface CoinData {
 
 interface AccountBalanceData {
   accountName: string;
+  exchange?: string;
   currentEquity: number;
   walletBalance: number;
   unrealizedPnl: number;
@@ -129,6 +130,18 @@ export default function AccountBalanceCard({ data, initialCollapsed = true }: Ac
     setIsCollapsed(!isCollapsed);
   };
 
+  const renderExchangeBadge = (exchange?: string) => {
+    if (!exchange) return null;
+    const ex = exchange.toLowerCase();
+    const style =
+      ex === 'binance' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+      ex === 'okx' ? 'bg-white/10 text-white border-white/20' :
+      ex === 'bitget' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' :
+      ex === 'gate' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+      'bg-orange-500/20 text-orange-400 border-orange-500/30';
+    return <Badge variant="outline" className={`text-[10px] uppercase font-mono px-1.5 py-0 ${style}`}>{exchange}</Badge>;
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -155,7 +168,10 @@ export default function AccountBalanceCard({ data, initialCollapsed = true }: Ac
                   <Wallet className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-white">{data.accountName.toUpperCase()}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-white">{data.accountName.toUpperCase()}</h3>
+                    {renderExchangeBadge(data.exchange)}
+                  </div>
                   <p className="text-sm text-muted-foreground">Trading Account</p>
                 </div>
               </div>
@@ -222,7 +238,10 @@ export default function AccountBalanceCard({ data, initialCollapsed = true }: Ac
                       <Wallet className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <CardTitle className="text-xl text-white">{data.accountName.toUpperCase()} ACCOUNT</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-xl text-white">{data.accountName.toUpperCase()} ACCOUNT</CardTitle>
+                        {renderExchangeBadge(data.exchange)}
+                      </div>
                       <CardDescription>Real-time balance & performance analysis</CardDescription>
                     </div>
                   </div>

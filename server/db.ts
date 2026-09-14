@@ -39,6 +39,7 @@ export function initialiseSchema() {
       exchange TEXT NOT NULL,
       api_key TEXT NOT NULL,
       api_secret TEXT NOT NULL,
+      passphrase TEXT,
       status TEXT NOT NULL DEFAULT 'active',
       last_sync INTEGER,
       created_at INTEGER NOT NULL
@@ -70,6 +71,17 @@ export function initialiseSchema() {
 
     CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
   `);
+
+  // Ensure passphrase column exists for accounts table if upgraded from an older version
+  try {
+    const tableInfo = sqlite.pragma("table_info(accounts)") as Array<{ name: string }>;
+    const hasPassphrase = tableInfo.some((col) => col.name === "passphrase");
+    if (!hasPassphrase) {
+      sqlite.exec("ALTER TABLE accounts ADD COLUMN passphrase TEXT;");
+    }
+  } catch (err) {
+    console.error("Failed to check/add passphrase column:", err);
+  }
 }
 
 export const databaseFile = dbPath;

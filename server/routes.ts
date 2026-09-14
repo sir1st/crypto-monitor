@@ -5,7 +5,11 @@ import { storage } from "./storage";
 import { setupWebSocket } from "./websocket";
 import { startAlertWatcher } from "./alerts";
 import { getCandles, getLastPrice, getServerTime, isValidInterval, KLINE_INTERVALS } from "./market";
-import { testApiConnection, getPositions, getWalletBalance } from "./bybit-api";
+import {
+  testExchangeConnection,
+  getExchangePositions,
+  getExchangeWalletBalance,
+} from "./exchanges/manager";
 import {
   aggregatePositions,
   aggregateWalletBalances,
@@ -20,6 +24,7 @@ import {
   insertAlertSchema,
   insertStrategySchema,
   updateStrategySchema,
+  SUPPORTED_EXCHANGES,
 } from "@shared/schema";
 import { getMarketHours } from "./market-hours";
 
@@ -134,38 +139,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }),
   );
 
-  // -- Aggregated Bybit views ----------------------------------------------
+  // -- Aggregated Exchange views --------------------------------------------
 
-  app.get(
-    "/api/bybit/positions",
-    handler(async (req, res) => {
-      const category = req.query.category === "inverse" ? "inverse" : "linear";
-      noStore(res);
-      res.json(await aggregatePositions(category));
-    }),
-  );
+  const handlePositions = async (req: Request, res: Response) => {
+    const category = req.query.category === "inverse" ? "inverse" : "linear";
+    noStore(res);
+    res.json(await aggregatePositions(category));
+  };
 
-  app.get(
-    "/api/bybit/wallet",
-    handler(async (_req, res) => {
-      const balances = await aggregateWalletBalances();
-      if (balances.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "No Bybit account returned a balance. Check credentials in Accounts.",
-        });
-      }
-      noStore(res);
-      res.json({ success: true, data: balances });
-    }),
-  );
+  app.get("/api/exchange/positions", handler(handlePositions));
+  app.get("/api/bybit/positions", handler(handlePositions));
 
-  app.get(
-    "/api/bybit/test",
-    handler(async (_req, res) => {
-      res.json(await testApiConnection());
-    }),
-  );
+  const handleWallet = async (_req: Request, res: Response) => {
+    const balances = await aggregateWalletBalances();
+    if (balances.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No exchange account returned a balance. Check credentials in Accounts.",
+      });
+    }
+    noStore(res);
+    res.json({ success: true, data: balances });
+  };
+
+  app.get("/api/exchange/wallet", handler(handleWallet));
+  app.get("/api/bybit/wallet", handler(handleWallet));
+
+  const handleTest = async (req: Request, res: Response) => {
+    const exchange = (req.query.exchange as string) ?? "bybit";
+    res.json(await testExchangeConnection(exchange));
+  };
+
+  app.get("/api/exchange/test", handler(handleTest));
+  app.get("/api/bybit/test", handler(handleTest));
 
   app.get(
     "/api/trophy-stats",
@@ -204,9 +210,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Credentials never leave the server.
       const accounts = await storage.getAllAccounts();
       res.json(
-        accounts.map(({ apiKey, apiSecret, ...rest }) => ({
+        accounts.map(({ apiKey, apiSecret, passphrase, ...rest }) => ({
           ...rest,
           hasCredentials: Boolean(apiKey && apiSecret),
+          hasPassphrase: Boolean(passphrase),
         })),
       );
     }),
@@ -219,8 +226,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!parsed.success) return badRequest(res, parsed.error);
 
       const account = await storage.createAccount(parsed.data);
-      const { apiKey, apiSecret, ...safe } = account;
-      res.status(201).json({ ...safe, hasCredentials: Boolean(apiKey && apiSecret) });
+      const { apiKey, apiSecret, passphrase, ...safe } = account;
+      res.status(201).json({
+        ...safe,
+        hasCredentials: Boolean(apiKey && apiSecret),
+        hasPassphrase: Boolean(passphrase),
+      });
     }),
   );
 
@@ -236,8 +247,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updated = await storage.updateAccount(id.data, parsed.data);
       if (!updated) return res.status(404).json({ error: "Account not found" });
 
-      const { apiKey, apiSecret, ...safe } = updated;
-      res.json({ ...safe, hasCredentials: Boolean(apiKey && apiSecret) });
+      const { apiKey, apiSecret, passphrase, ...safe } = updated;
+      res.json({
+        ...safe,
+        hasCredentials: Boolean(apiKey && apiSecret),
+        hasPassphrase: Boolean(passphrase),
+      });
     }),
   );
 
@@ -253,7 +268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }),
   );
 
-  /** Loads an account and rejects it if it can't serve Bybit reads. */
+  /** Loads an account and rejects it if it can't serve exchange reads. */
   async function tradableAccount(req: Request, res: Response) {
     const id = idParam.safeParse(req.params.id);
     if (!id.success) {
@@ -266,8 +281,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(404).json({ error: "Account not found" });
       return null;
     }
-    if (account.exchange !== "bybit") {
-      res.status(400).json({ error: "Account is not a Bybit account" });
+    if (!(SUPPORTED_EXCHANGES as readonly string[]).includes(account.exchange)) {
+      res.status(400).json({ error: `Unsupported exchange: ${account.exchange}` });
       return null;
     }
     if (!account.apiKey || !account.apiSecret) {
@@ -283,14 +298,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const account = await tradableAccount(req, res);
       if (!account) return;
 
-      const category = req.query.category === "inverse" ? "inverse" : "linear";
-      const positions = await getPositions(category, {
-        apiKey: account.apiKey,
-        apiSecret: account.apiSecret,
-      });
-      if (!positions) {
-        return res.status(502).json({ error: "Bybit did not return positions for this account" });
-      }
+      const positions = await getExchangePositions(
+        account.exchange,
+        { apiKey: account.apiKey, apiSecret: account.apiSecret, passphrase: account.passphrase },
+        account.name,
+        account.id,
+      );
       noStore(res);
       res.json(positions);
     }),
@@ -302,12 +315,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const account = await tradableAccount(req, res);
       if (!account) return;
 
-      const wallet = await getWalletBalance({
-        apiKey: account.apiKey,
-        apiSecret: account.apiSecret,
-      });
+      const wallet = await getExchangeWalletBalance(
+        account.exchange,
+        { apiKey: account.apiKey, apiSecret: account.apiSecret, passphrase: account.passphrase },
+        account.name,
+        account.id,
+      );
       if (!wallet) {
-        return res.status(502).json({ error: "Bybit did not return a balance for this account" });
+        return res.status(502).json({ error: `${account.exchange} did not return a balance for this account` });
       }
       noStore(res);
       res.json(wallet);
@@ -321,7 +336,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!account) return;
 
       res.json(
-        await testApiConnection({ apiKey: account.apiKey, apiSecret: account.apiSecret }),
+        await testExchangeConnection(account.exchange, {
+          apiKey: account.apiKey,
+          apiSecret: account.apiSecret,
+          passphrase: account.passphrase,
+        }),
       );
     }),
   );

@@ -17,12 +17,14 @@ export class Storage {
     return db.select().from(accounts);
   }
 
-  /** Active Bybit accounts that actually carry credentials. */
-  async getTradableAccounts(): Promise<Account[]> {
+  /** Active accounts that actually carry credentials. */
+  async getTradableAccounts(exchange?: string): Promise<Account[]> {
     const all = await this.getAllAccounts();
-    return all.filter(
-      (a) => a.exchange === "bybit" && a.status === "active" && a.apiKey && a.apiSecret,
-    );
+    return all.filter((a) => {
+      if (a.status !== "active" || !a.apiKey || !a.apiSecret) return false;
+      if (exchange && a.exchange !== exchange) return false;
+      return true;
+    });
   }
 
   async getAccount(id: number): Promise<Account | undefined> {

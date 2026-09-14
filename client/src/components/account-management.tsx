@@ -31,6 +31,7 @@ export default function AccountManagement() {
     exchange: 'bybit',
     apiKey: '',
     apiSecret: '',
+    passphrase: '',
     status: 'active'
   });
 
@@ -51,7 +52,7 @@ export default function AccountManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
-      setNewAccount({ name: '', exchange: 'bybit', apiKey: '', apiSecret: '', status: 'active' });
+      setNewAccount({ name: '', exchange: 'bybit', apiKey: '', apiSecret: '', passphrase: '', status: 'active' });
       setIsAddDialogOpen(false);
     },
   });
@@ -102,6 +103,23 @@ export default function AccountManagement() {
   const maskApiKey = (apiKey: string) => {
     if (apiKey.length <= 8) return '*'.repeat(apiKey.length);
     return apiKey.substring(0, 4) + '*'.repeat(apiKey.length - 8) + apiKey.substring(apiKey.length - 4);
+  };
+
+  const getExchangeBadge = (exchange: string) => {
+    switch (exchange.toLowerCase()) {
+      case 'binance':
+        return <Badge className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 uppercase text-[10px]">Binance</Badge>;
+      case 'okx':
+        return <Badge className="bg-white/15 text-white border border-white/20 uppercase text-[10px]">OKX</Badge>;
+      case 'bybit':
+        return <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30 uppercase text-[10px]">Bybit</Badge>;
+      case 'bitget':
+        return <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 uppercase text-[10px]">Bitget</Badge>;
+      case 'gate':
+        return <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase text-[10px]">Gate.io</Badge>;
+      default:
+        return <Badge variant="outline" className="text-[10px]">{exchange}</Badge>;
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -192,16 +210,18 @@ export default function AccountManagement() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="exchange" className="text-white/80">Exchange</Label>
+                  <Label htmlFor="exchange" className="text-white/80">Exchange (交易所)</Label>
                   <select
                     id="exchange"
                     value={newAccount.exchange}
-                    onChange={(e) => setNewAccount(prev => ({ ...prev, exchange: e.target.value }))}
+                    onChange={(e) => setNewAccount(prev => ({ ...prev, exchange: e.target.value as any }))}
                     className="w-full bg-[#0a192f] border border-[#00b4d8]/20 rounded-md px-3 py-2 text-white"
                   >
                     <option value="bybit">Bybit</option>
-                    <option value="binance" disabled>Binance (Coming Soon)</option>
-                    <option value="okx" disabled>OKX (Coming Soon)</option>
+                    <option value="binance">Binance (币安)</option>
+                    <option value="okx">OKX (欧易)</option>
+                    <option value="bitget">Bitget</option>
+                    <option value="gate">Gate.io (芝麻开门)</option>
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -225,6 +245,19 @@ export default function AccountManagement() {
                     className="bg-[#0a192f] border-[#00b4d8]/20 text-white"
                   />
                 </div>
+                {(newAccount.exchange === 'okx' || newAccount.exchange === 'bitget') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="passphrase" className="text-white/80">API Passphrase (密码)</Label>
+                    <Input
+                      id="passphrase"
+                      type="password"
+                      placeholder="Enter your API Passphrase"
+                      value={newAccount.passphrase ?? ''}
+                      onChange={(e) => setNewAccount(prev => ({ ...prev, passphrase: e.target.value }))}
+                      className="bg-[#0a192f] border-[#00b4d8]/20 text-white"
+                    />
+                  </div>
+                )}
                 <div className="bg-[#0a192f]/50 p-3 rounded-md border border-[#00b4d8]/10">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 text-[#ffc107] mt-0.5" />
@@ -268,6 +301,7 @@ export default function AccountManagement() {
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
                       <h3 className="text-white font-medium">{account.name}</h3>
+                      {getExchangeBadge(account.exchange)}
                       <Badge 
                         variant="outline" 
                         className={`text-xs ${getStatusColor(account.status)} border-current`}
