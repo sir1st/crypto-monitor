@@ -37,6 +37,15 @@ export default function AccountManagement() {
     passphrase: '',
     status: 'active'
   });
+  const [editingAccount, setEditingAccount] = useState<AccountSummary | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    exchange: 'bybit',
+    status: 'active',
+    apiKey: '',
+    apiSecret: '',
+    passphrase: '',
+  });
 
   // Fetch accounts from API
   const { data: accounts = [], isLoading, error } = useQuery<AccountSummary[]>({
@@ -77,8 +86,46 @@ export default function AccountManagement() {
     createAccountMutation.mutate(newAccount);
   };
 
+  // Update account mutation
+  const updateAccountMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Record<string, unknown> }) => {
+      const response = await apiRequest('PUT', `/api/accounts/${id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      setEditingAccount(null);
+    },
+  });
+
   const handleRemoveAccount = (id: number) => {
     deleteAccountMutation.mutate(id);
+  };
+
+  const openEditAccount = (account: AccountSummary) => {
+    setEditForm({
+      name: account.name,
+      exchange: account.exchange,
+      status: account.status,
+      apiKey: '',
+      apiSecret: '',
+      passphrase: '',
+    });
+    setEditingAccount(account);
+  };
+
+  const handleUpdateAccount = () => {
+    if (!editingAccount || !editForm.name.trim()) return;
+    const data: Record<string, unknown> = {
+      name: editForm.name,
+      exchange: editForm.exchange,
+      status: editForm.status,
+    };
+    // Blank credential fields mean "keep what is already stored".
+    if (editForm.apiKey) data.apiKey = editForm.apiKey;
+    if (editForm.apiSecret) data.apiSecret = editForm.apiSecret;
+    if (editForm.passphrase) data.passphrase = editForm.passphrase;
+    updateAccountMutation.mutate({ id: editingAccount.id, data });
   };
 
   const getStatusColor = (status: Account['status']) => {
@@ -340,7 +387,9 @@ export default function AccountManagement() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => openEditAccount(account)}
                       className="text-[#00b4d8] hover:bg-[#00b4d8]/10 p-2"
+                      aria-label={`Edit ${account.name}`}
                     >
                       <Settings className="h-4 w-4" />
                     </Button>
@@ -377,6 +426,111 @@ export default function AccountManagement() {
             </div>
           )}
         </div>
+
+        <Dialog
+          open={editingAccount !== null}
+          onOpenChange={(open) => {
+            if (!open) setEditingAccount(null);
+          }}
+        >
+          <DialogContent className="bg-[#0d2538] border-[#00b4d8]/20 text-white">
+            <DialogHeader>
+              <DialogTitle className="text-[#ffc107]">Edit {editingAccount?.name}</DialogTitle>
+              <DialogDescription className="text-white/70">
+                Update the label, status or credentials. Leave a credential field blank to keep the stored value.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="editName" className="text-white/80">Account Name</Label>
+                <Input
+                  id="editName"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                  className="bg-[#0a192f] border-[#00b4d8]/20 text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editExchange" className="text-white/80">Exchange (交易所)</Label>
+                <select
+                  id="editExchange"
+                  value={editForm.exchange}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, exchange: e.target.value }))}
+                  className="w-full bg-[#0a192f] border border-[#00b4d8]/20 rounded-md px-3 py-2 text-white"
+                >
+                  <option value="bybit">Bybit</option>
+                  <option value="binance">Binance (币安)</option>
+                  <option value="okx">OKX (欧易)</option>
+                  <option value="bitget">Bitget</option>
+                  <option value="gate">Gate.io (芝麻开门)</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editStatus" className="text-white/80">Status</Label>
+                <select
+                  id="editStatus"
+                  value={editForm.status}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+                  className="w-full bg-[#0a192f] border border-[#00b4d8]/20 rounded-md px-3 py-2 text-white"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editApiKey" className="text-white/80">API Key</Label>
+                <Input
+                  id="editApiKey"
+                  type="password"
+                  placeholder="Leave blank to keep current"
+                  value={editForm.apiKey}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, apiKey: e.target.value }))}
+                  className="bg-[#0a192f] border-[#00b4d8]/20 text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editApiSecret" className="text-white/80">API Secret</Label>
+                <Input
+                  id="editApiSecret"
+                  type="password"
+                  placeholder="Leave blank to keep current"
+                  value={editForm.apiSecret}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, apiSecret: e.target.value }))}
+                  className="bg-[#0a192f] border-[#00b4d8]/20 text-white"
+                />
+              </div>
+              {(editForm.exchange === 'okx' || editForm.exchange === 'bitget') && (
+                <div className="space-y-2">
+                  <Label htmlFor="editPassphrase" className="text-white/80">API Passphrase (密码)</Label>
+                  <Input
+                    id="editPassphrase"
+                    type="password"
+                    placeholder="Leave blank to keep current"
+                    value={editForm.passphrase}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, passphrase: e.target.value }))}
+                    className="bg-[#0a192f] border-[#00b4d8]/20 text-white"
+                  />
+                </div>
+              )}
+              <div className="flex gap-2 pt-4">
+                <Button
+                  onClick={handleUpdateAccount}
+                  disabled={!editForm.name.trim() || updateAccountMutation.isPending}
+                  className="flex-1 bg-[#00b4d8] hover:bg-[#00b4d8]/80 text-white"
+                >
+                  Save Changes
+                </Button>
+                <Button
+                  onClick={() => setEditingAccount(null)}
+                  variant="outline"
+                  className="border-[#00b4d8]/50 text-[#00b4d8] hover:bg-[#00b4d8]/10"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
