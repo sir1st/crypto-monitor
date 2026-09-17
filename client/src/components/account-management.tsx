@@ -13,19 +13,22 @@ import {
   Plus, 
   Wallet, 
   Settings, 
-  Eye, 
-  EyeOff, 
+  ShieldCheck,
   ExternalLink, 
   Check, 
   AlertCircle,
-  Trash2,
-  Edit
+  Trash2
 } from "lucide-react";
+
+/** Shape returned by GET /api/accounts: credentials are stripped server-side. */
+type AccountSummary = Omit<Account, "apiKey" | "apiSecret" | "passphrase"> & {
+  hasCredentials: boolean;
+  hasPassphrase: boolean;
+};
 
 export default function AccountManagement() {
   const queryClient = useQueryClient();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [showApiKeys, setShowApiKeys] = useState<Record<string, boolean>>({});
   const [newAccount, setNewAccount] = useState<Omit<InsertAccount, 'userId'>>({
     name: '',
     exchange: 'bybit',
@@ -36,7 +39,7 @@ export default function AccountManagement() {
   });
 
   // Fetch accounts from API
-  const { data: accounts = [], isLoading, error } = useQuery<Account[]>({
+  const { data: accounts = [], isLoading, error } = useQuery<AccountSummary[]>({
     queryKey: ['/api/accounts'],
     queryFn: async () => {
       const response = await apiRequest('GET', '/api/accounts');
@@ -78,10 +81,6 @@ export default function AccountManagement() {
     deleteAccountMutation.mutate(id);
   };
 
-  const toggleApiKeyVisibility = (id: number) => {
-    setShowApiKeys(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
   const getStatusColor = (status: Account['status']) => {
     switch (status) {
       case 'active': return 'bg-green-500/20 text-green-400';
@@ -98,11 +97,6 @@ export default function AccountManagement() {
       case 'error': return <AlertCircle className="h-3 w-3" />;
       default: return null;
     }
-  };
-
-  const maskApiKey = (apiKey: string) => {
-    if (apiKey.length <= 8) return '*'.repeat(apiKey.length);
-    return apiKey.substring(0, 4) + '*'.repeat(apiKey.length - 8) + apiKey.substring(apiKey.length - 4);
   };
 
   const getExchangeBadge = (exchange: string) => {
@@ -320,16 +314,17 @@ export default function AccountManagement() {
                           <span>Exchange: {account.exchange.charAt(0).toUpperCase() + account.exchange.slice(1)}</span>
                         </div>
                         <div className="flex items-center space-x-2 text-white/70">
-                          <span>API Key:</span>
-                          <code className="text-xs bg-[#112240] px-2 py-1 rounded">
-                            {showApiKeys[account.id] ? account.apiKey : maskApiKey(account.apiKey)}
-                          </code>
-                          <button
-                            onClick={() => toggleApiKeyVisibility(account.id)}
-                            className="text-[#00b4d8] hover:text-[#00b4d8]/80"
-                          >
-                            {showApiKeys[account.id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                          </button>
+                          {account.hasCredentials ? (
+                            <>
+                              <ShieldCheck className="h-3 w-3 text-green-400" />
+                              <span>Credentials stored (read-only, never exposed)</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="h-3 w-3 text-red-400" />
+                              <span className="text-red-400">No credentials</span>
+                            </>
+                          )}
                         </div>
                       </div>
                       
