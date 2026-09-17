@@ -7,6 +7,7 @@ import DashboardPage from "@/pages/dashboard-page";
 import CalculatorPage from "@/pages/calculator-page";
 import TradingPositions from "@/components/trading-positions";
 import AccountManagement from "@/components/account-management";
+import AccountAddressMap from "@/components/account-address-map";
 import { WalletStream } from "@/components/wallet-stream";
 import BybitApiStatus from "@/components/bybit-api-status";
 import MarketHours from "@/components/market-hours";
@@ -482,6 +483,9 @@ export default function HomePage() {
             
             <TabsContent value="accounts" className="mt-0">
               <AccountManagement />
+              <div className="mt-6">
+                <AccountAddressMap />
+              </div>
             </TabsContent>
             
             <TabsContent value="streaming" className="mt-0">
