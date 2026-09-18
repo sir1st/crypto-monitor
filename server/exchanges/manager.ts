@@ -274,7 +274,20 @@ export async function getExchangeWalletBalance(
   // CCXT for Binance, OKX, Bitget, Gate
   try {
     const client = getCcxtClient(ex, credentials);
-    const balance = await client.fetchBalance();
+
+    // Bitget accounts running in Unified Account (UTA) mode reject the classic
+    // balance API, so a plain fetchBalance() returns an empty structure. Ask for
+    // the UTA endpoint and fall back to the classic call for non-UTA accounts.
+    let balance: Awaited<ReturnType<Exchange["fetchBalance"]>>;
+    if (ex === "bitget") {
+      try {
+        balance = await client.fetchBalance({ uta: true });
+      } catch {
+        balance = await client.fetchBalance();
+      }
+    } else {
+      balance = await client.fetchBalance();
+    }
 
     const coins: CoinBalance[] = [];
     let totalEquity = 0;
