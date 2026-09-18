@@ -42,7 +42,7 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     bitget: { accountId: "bitget_acct3", principal: "100U", entry: "0.5x" },
   },
   {
-    address: "0xa1b6d8efbcb2fb750a84dbc05649fa4968034f04",
+    address: "0xf97ad6704baec104d00b88e0c157e2b7b3a1ddd1",
     ref: "66668",
     bybit: { accountId: "bybitswapu_acct4", principal: "3000U", entry: "0.1x" },
     bitget: { accountId: "bitget_acct4", principal: "100U", entry: "0.5x" },
