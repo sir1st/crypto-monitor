@@ -1,55 +1,70 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExternalLink, Network } from "lucide-react";
 
-const HYPERX_REF = "66668";
+const traderUrl = (address: string, ref: string) =>
+  `https://hyperx.trade/hyperliquid/trader?address=${address}&ref=${ref}`;
 
-const traderUrl = (address: string) =>
-  `https://hyperx.trade/hyperliquid/trader?address=${address}&ref=${HYPERX_REF}`;
+interface ExchangeAccount {
+  accountId: string;
+  principal: string;
+  entry: string;
+}
 
 interface AccountAddressMapping {
-  accountId: string;
-  username: string;
   address: string;
-  baseMarginAmount: string;
+  ref: string;
+  bybit: ExchangeAccount;
+  bitget: ExchangeAccount;
 }
 
 /**
- * Bybit account -> HyperX address mapping, sourced from the trading backend's
- * config/local.json `accounts` list. Kept in sync with the account names in the
- * `accounts` table.
+ * HyperX address -> Bybit + Bitget account mapping, sourced from the trading
+ * backend's hyperx.ak.sk. Kept in sync with the account names in the `accounts`
+ * table. Each address is mirrored by one Bybit and one Bitget account.
  */
 const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
   {
-    accountId: "bybitswapu_acct1",
-    username: "acct1",
-    address: "0xf97ad6704baec104d00b88e0c157e2b7b3a1ddd1",
-    baseMarginAmount: "500",
+    address: "0xa1b6d8efbcb2fb750a84dbc05649fa4968034f04",
+    ref: "66668",
+    bybit: { accountId: "bybitswapu_acct1", principal: "2000U", entry: "0.2x" },
+    bitget: { accountId: "bitget_acct1", principal: "100U", entry: "0.5x" },
   },
   {
-    accountId: "bybitswapu_acct2",
-    username: "acct2",
     address: "0xca83349eaee309b8143ab34ce2b33df0a0295bcd",
-    baseMarginAmount: "400",
+    ref: "HYPER",
+    bybit: { accountId: "bybitswapu_acct2", principal: "1000U", entry: "0.4x" },
+    bitget: { accountId: "bitget_acct2", principal: "100U", entry: "0.5x" },
   },
   {
-    accountId: "bybitswapu_acct3",
-    username: "acct3",
     address: "0xfdb03a2574e9e7d1c77d9ed752d99cdf25c3db25",
-    baseMarginAmount: "330",
+    ref: "66668",
+    bybit: { accountId: "bybitswapu_acct3", principal: "1000U", entry: "0.33x" },
+    bitget: { accountId: "bitget_acct3", principal: "100U", entry: "0.5x" },
   },
   {
-    accountId: "bybitswapu_acct4",
-    username: "acct4",
-    address: "0xb7e0b9fbc9479330d70bcc82a7d4325a20e8d1aa",
-    baseMarginAmount: "300",
+    address: "0xa1b6d8efbcb2fb750a84dbc05649fa4968034f04",
+    ref: "66668",
+    bybit: { accountId: "bybitswapu_acct4", principal: "3000U", entry: "0.1x" },
+    bitget: { accountId: "bitget_acct4", principal: "100U", entry: "0.5x" },
   },
   {
-    accountId: "bybitswapu_acct5",
-    username: "acct5",
-    address: "0xf2b23d759dc23cea06ae9fb2d6cd7059c74cad8e",
-    baseMarginAmount: "300",
+    address: "0x769232f7de58dcdb30659b34d9d51ded02537848",
+    ref: "66668",
+    bybit: { accountId: "bybitswapu_acct5", principal: "3000U", entry: "0.1x" },
+    bitget: { accountId: "bitget_acct5", principal: "100U", entry: "0.5x" },
   },
 ];
+
+function AccountCell({ account }: { account: ExchangeAccount }) {
+  return (
+    <div>
+      <div className="text-white/90 font-medium">{account.accountId}</div>
+      <div className="text-white/50 text-xs">
+        {account.principal} · 开仓 {account.entry}
+      </div>
+    </div>
+  );
+}
 
 export default function AccountAddressMap() {
   return (
@@ -57,10 +72,10 @@ export default function AccountAddressMap() {
       <CardHeader>
         <CardTitle className="text-lg font-bold text-white flex items-center">
           <Network className="h-5 w-5 text-[#00b4d8] mr-2" />
-          Bybit → HyperX Mapping
+          Bybit / Bitget → HyperX Mapping
         </CardTitle>
         <CardDescription className="text-white/70">
-          Each Bybit account and the HyperX trader address it mirrors. Click an address to open it.
+          Each HyperX trader address and the Bybit + Bitget accounts it mirrors. Click an address to open it.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -68,25 +83,20 @@ export default function AccountAddressMap() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-white/60 border-b border-[#00b4d8]/20">
+                <th className="py-2 pr-4 font-medium">HyperX Address</th>
                 <th className="py-2 pr-4 font-medium">Bybit Account</th>
-                <th className="py-2 pr-4 font-medium">Base Margin</th>
-                <th className="py-2 font-medium">HyperX Address</th>
+                <th className="py-2 font-medium">Bitget Account</th>
               </tr>
             </thead>
             <tbody>
-              {ACCOUNT_ADDRESS_MAPPINGS.map((mapping) => (
+              {ACCOUNT_ADDRESS_MAPPINGS.map((mapping, index) => (
                 <tr
-                  key={mapping.accountId}
-                  className="border-b border-white/5 last:border-0 hover:bg-[#00b4d8]/5 transition-colors"
+                  key={`${mapping.address}-${index}`}
+                  className="border-b border-white/5 last:border-0 hover:bg-[#00b4d8]/5 transition-colors align-top"
                 >
                   <td className="py-3 pr-4">
-                    <div className="text-white/90 font-medium">{mapping.accountId}</div>
-                    <div className="text-white/50 text-xs">{mapping.username}</div>
-                  </td>
-                  <td className="py-3 pr-4 text-white/70">{mapping.baseMarginAmount}</td>
-                  <td className="py-3">
                     <a
-                      href={traderUrl(mapping.address)}
+                      href={traderUrl(mapping.address, mapping.ref)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-[#00b4d8] hover:text-[#00b4d8]/80 font-mono text-xs break-all"
@@ -94,6 +104,12 @@ export default function AccountAddressMap() {
                       {mapping.address}
                       <ExternalLink className="h-3 w-3 flex-shrink-0" />
                     </a>
+                  </td>
+                  <td className="py-3 pr-4">
+                    <AccountCell account={mapping.bybit} />
+                  </td>
+                  <td className="py-3">
+                    <AccountCell account={mapping.bitget} />
                   </td>
                 </tr>
               ))}
