@@ -389,6 +389,36 @@ export async function getExchangeClosedPnL(
     }));
   }
 
+  // Binance reports realised P&L through the futures income ledger, which —
+  // unlike fetchMyTrades — does not need a symbol per call.
+  if (ex === "binance") {
+    try {
+      const client = getCcxtClient(ex, credentials);
+      const entries = await client.fetchLedger(undefined, startTime, limit, {
+        incomeType: "REALIZED_PNL",
+      });
+      return entries.map((entry) => {
+        // parseLedgerEntry folds the sign into `direction` and keeps `amount`
+        // positive, so re-apply it here.
+        const magnitude = Number(entry.amount ?? 0);
+        const signed = entry.direction === "out" ? -magnitude : magnitude;
+        const info = entry.info as { symbol?: string };
+        return {
+          symbol: info?.symbol ? cleanSymbol(info.symbol) : "UNKNOWN",
+          closedPnl: String(signed),
+          cumEntryValue: "0",
+          leverage: "1",
+          closedSize: "0",
+          avgEntryPrice: "0",
+          createdTime: String(entry.timestamp ?? Date.now()),
+        };
+      });
+    } catch (error) {
+      console.error(`Fetching closed PnL from ${exchange} failed:`, error);
+      return [];
+    }
+  }
+
   // Bitget's classic fills endpoint is disabled for Unified Accounts, and the
   // elite copy-trading API has no per-fill history. Realised P&L is exposed as a
   // running total through getExchangePnlSnapshot instead.
