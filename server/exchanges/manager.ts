@@ -9,6 +9,7 @@ import type {
   CoinBalance,
 } from "./types";
 import * as bybitNative from "../bybit-api";
+import { getElitePnl, getElitePositions } from "./bitget-elite";
 
 interface ClientCacheEntry {
   client: Exchange;
@@ -187,6 +188,12 @@ export async function getExchangePositions(
       cumRealisedPnl: String(p.cumRealisedPnl ?? "0"),
       updatedTime: String(p.updatedTime ?? Date.now()),
     }));
+  }
+
+  // Bitget elite portfolios expose positions only through the copy-trading API.
+  if (ex === "bitget") {
+    const elite = await getElitePositions(credentials, accountName, accountId);
+    if (elite) return elite;
   }
 
   // Use CCXT for Binance, OKX, Bitget, Gate
@@ -382,7 +389,12 @@ export async function getExchangeClosedPnL(
     }));
   }
 
-  // For Binance, OKX, Bitget, Gate: use CCXT fetchMyTrades
+  // Bitget's classic fills endpoint is disabled for Unified Accounts, and the
+  // elite copy-trading API has no per-fill history. Realised P&L is exposed as a
+  // running total through getExchangePnlSnapshot instead.
+  if (ex === "bitget") return [];
+
+  // For Binance, OKX, Gate: use CCXT fetchMyTrades
   try {
     const client = getCcxtClient(ex, credentials);
     let trades: Trade[] = [];
@@ -419,4 +431,22 @@ export async function getExchangeClosedPnL(
     console.error(`Fetching closed PnL from ${exchange} failed:`, error);
     return [];
   }
+}
+
+export interface ExchangePnlSnapshot {
+  realizedPnl: number;
+  unrealizedPnl: number;
+}
+
+/**
+ * P&L that cannot be reconstructed from closed fills, for exchanges whose API
+ * only reports running totals. Currently only Bitget elite portfolios; returns
+ * `null` for everything else so callers keep the trade-derived figures.
+ */
+export async function getExchangePnlSnapshot(
+  exchange: SupportedExchange | string,
+  credentials: ExchangeCredentials,
+): Promise<ExchangePnlSnapshot | null> {
+  if (exchange.toLowerCase() !== "bitget") return null;
+  return getElitePnl(credentials);
 }

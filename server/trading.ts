@@ -3,6 +3,7 @@ import {
   getExchangePositions,
   getExchangeWalletBalance,
   getExchangeClosedPnL,
+  getExchangePnlSnapshot,
 } from "./exchanges/manager";
 import type { ExchangeCredentials, StandardPosition } from "./exchanges/types";
 import type { Account } from "@shared/schema";
@@ -453,9 +454,11 @@ export async function buildAccountBalanceReports(): Promise<AccountBalanceReport
     );
     if (!wallet) continue;
 
+    const pnlSnapshot = await getExchangePnlSnapshot(account.exchange, credentials);
+
     const currentEquity = wallet.totalEquity;
     const walletBalance = wallet.totalWalletBalance;
-    const unrealizedPnl = wallet.totalPerpUPL;
+    const unrealizedPnl = pnlSnapshot?.unrealizedPnl ?? wallet.totalPerpUPL;
 
     const [sevenDayTrades, weeklyTrades] = await Promise.all([
       getExchangeClosedPnL(account.exchange, credentials, {
@@ -470,6 +473,11 @@ export async function buildAccountBalanceReports(): Promise<AccountBalanceReport
 
     const last7Days = summarisePeriod(sevenDayTrades as ClosedTrade[]);
     const thisWeek = summarisePeriod(weeklyTrades as ClosedTrade[]);
+    if (pnlSnapshot) {
+      // Bitget elite portfolios report a single running realised P&L total.
+      last7Days.pnl = round2(pnlSnapshot.realizedPnl);
+      thisWeek.pnl = round2(pnlSnapshot.realizedPnl);
+    }
 
     const balance7DaysAgo = walletBalance - last7Days.pnl;
     const balanceWeekStart = currentEquity - thisWeek.pnl;
