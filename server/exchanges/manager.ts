@@ -18,6 +18,14 @@ interface ClientCacheEntry {
 
 const clientCache = new Map<string, ClientCacheEntry>();
 
+/** Bybit rejects a closed-P&L range wider than 7 days. */
+const BYBIT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const BYBIT_PAGE_LIMIT = 100;
+/** Bybit also pages at 100 rows, so cap cursor pages to bound the request count. */
+const BYBIT_MAX_PAGES_PER_WINDOW = 3;
+/** Bound the native history walk to 13 weekly windows (~91 days) per account. */
+const BYBIT_MAX_LOOKBACK_MS = 13 * BYBIT_WINDOW_MS;
+
 function getCacheKey(exchange: string, credentials?: ExchangeCredentials): string {
   return `${exchange}:${credentials?.apiKey ?? "public"}:${credentials?.passphrase ?? ""}`;
 }
@@ -79,6 +87,25 @@ export function getCcxtClient(exchange: SupportedExchange | string, credentials?
 
   clientCache.set(cacheKey, { client, createdAt: Date.now() });
   return client;
+}
+
+/**
+ * Warms a cached ccxt client's market cache with a single public call. Bitget
+ * rate-limits those calls by IP, so callers warm clients one at a time before
+ * fanning out; without this, concurrent balance reads trip 429s.
+ */
+export async function preloadExchangeClient(
+  exchange: SupportedExchange | string,
+  credentials: ExchangeCredentials,
+): Promise<void> {
+  if (exchange.toLowerCase() === "bybit") return;
+
+  try {
+    await getCcxtClient(exchange, credentials).loadMarkets();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Preloading ${exchange} markets failed: ${message}`);
+  }
 }
 
 function cleanSymbol(symbol: string): string {
@@ -365,28 +392,60 @@ export async function getExchangeWalletBalance(
 export async function getExchangeClosedPnL(
   exchange: SupportedExchange | string,
   credentials: ExchangeCredentials,
-  options: { startTime?: number; limit?: number } = {},
+  options: { startTime?: number; endTime?: number; limit?: number } = {},
 ): Promise<StandardClosedTrade[]> {
   const ex = exchange.toLowerCase();
-  const { startTime, limit = 200 } = options;
+  const { startTime, endTime, limit = 200 } = options;
 
-  // If Bybit, use native closed PnL
+  // Bybit rejects a closed-P&L range wider than 7 days (and ignores a lone
+  // startTime), so walk the window in week-long slices, newest first, until the
+  // look-back or row limit is reached.
   if (ex === "bybit") {
-    const raw = await bybitNative.getClosedPnL({
-      credentials: { apiKey: credentials.apiKey, apiSecret: credentials.apiSecret },
-      limit,
-      startTime,
-    });
-    if (!raw?.list) return [];
-    return raw.list.map((t) => ({
-      symbol: t.symbol ?? "UNKNOWN",
-      closedPnl: String(t.closedPnl ?? "0"),
-      cumEntryValue: String(t.cumEntryValue ?? "0"),
-      leverage: String(t.leverage ?? "1"),
-      closedSize: String(t.closedSize ?? "0"),
-      avgEntryPrice: String(t.avgEntryPrice ?? "0"),
-      createdTime: String(t.createdTime ?? Date.now()),
-    }));
+    const bybitCredentials = {
+      apiKey: credentials.apiKey,
+      apiSecret: credentials.apiSecret,
+    };
+    const to = endTime ?? Date.now();
+    const from = Math.max(startTime ?? to - BYBIT_WINDOW_MS, to - BYBIT_MAX_LOOKBACK_MS);
+    const trades: StandardClosedTrade[] = [];
+
+    for (
+      let windowEnd = to;
+      windowEnd > from && trades.length < limit;
+      windowEnd -= BYBIT_WINDOW_MS
+    ) {
+      const windowStart = Math.max(from, windowEnd - BYBIT_WINDOW_MS);
+      let cursor: string | undefined;
+      let pages = 0;
+
+      do {
+        const raw = await bybitNative.getClosedPnL({
+          credentials: bybitCredentials,
+          limit: Math.min(limit - trades.length, BYBIT_PAGE_LIMIT),
+          startTime: windowStart,
+          endTime: windowEnd,
+          cursor,
+        });
+        if (!raw?.list?.length) break;
+
+        for (const t of raw.list) {
+          trades.push({
+            symbol: t.symbol ?? "UNKNOWN",
+            closedPnl: String(t.closedPnl ?? "0"),
+            cumEntryValue: String(t.cumEntryValue ?? "0"),
+            leverage: String(t.leverage ?? "1"),
+            closedSize: String(t.closedSize ?? "0"),
+            avgEntryPrice: String(t.avgEntryPrice ?? "0"),
+            createdTime: String(t.createdTime ?? Date.now()),
+          });
+        }
+
+        cursor = raw.nextPageCursor || undefined;
+        pages += 1;
+      } while (cursor && trades.length < limit && pages < BYBIT_MAX_PAGES_PER_WINDOW);
+    }
+
+    return trades.slice(0, limit);
   }
 
   // Binance reports realised P&L through the futures income ledger, which —

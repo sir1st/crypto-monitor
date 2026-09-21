@@ -4,6 +4,7 @@ import {
   getExchangeWalletBalance,
   getExchangeClosedPnL,
   getExchangePnlSnapshot,
+  preloadExchangeClient,
 } from "./exchanges/manager";
 import type { ExchangeCredentials, StandardPosition } from "./exchanges/types";
 import type { Account } from "@shared/schema";
@@ -250,6 +251,90 @@ export async function buildTradingReports(timeframeDays = 7): Promise<TradingRep
 }
 
 // ---------------------------------------------------------------------------
+// Trade history
+// ---------------------------------------------------------------------------
+
+export interface TradeHistoryEntry {
+  accountName: string;
+  exchange: string;
+  symbol: string;
+  closedPnl: number;
+  margin: number;
+  /** Margin-based return on the trade, in percent. */
+  roi: number;
+  leverage: number;
+  closedSize: number;
+  avgEntryPrice: number;
+  closedAt: string;
+}
+
+export interface TradeHistoryOptions {
+  timeframeDays?: number;
+  exchange?: string;
+  symbol?: string;
+  limit?: number;
+}
+
+/** Exchanges whose API exposes no per-fill history to this app. */
+export const HISTORY_UNAVAILABLE_EXCHANGES = ["bitget"] as const;
+
+/**
+ * Individual closed trades across every configured account, newest first.
+ * `buildTradingReports` aggregates the same source into per-account totals;
+ * this returns the raw rows behind those totals.
+ */
+export async function buildTradeHistory(
+  options: TradeHistoryOptions = {},
+): Promise<TradeHistoryEntry[]> {
+  const { timeframeDays = 30, exchange, symbol, limit = 200 } = options;
+  const now = Date.now();
+  const cutoff = now - timeframeDays * 24 * 60 * 60 * 1000;
+  const accounts = await storage.getTradableAccounts(exchange);
+
+  // Accounts are independent (distinct API keys), so fetch them concurrently.
+  const perAccount = await Promise.all(
+    accounts.map(async (account) => {
+      const trades = await getExchangeClosedPnL(account.exchange, credentialsFor(account), {
+        limit: MAX_TRADES_PER_QUERY,
+        startTime: cutoff,
+        endTime: now,
+      });
+
+      const rows: TradeHistoryEntry[] = [];
+      for (const trade of trades as ClosedTrade[]) {
+        const closedAt = Number(trade.createdTime ?? 0);
+        if (closedAt < cutoff) continue;
+
+        const tradeSymbol = trade.symbol ?? "UNKNOWN";
+        if (symbol && !tradeSymbol.toUpperCase().includes(symbol.toUpperCase())) continue;
+
+        const pnl = Number(trade.closedPnl ?? "0");
+        const margin = marginOf(trade);
+
+        rows.push({
+          accountName: account.name,
+          exchange: account.exchange,
+          symbol: tradeSymbol,
+          closedPnl: round2(pnl),
+          margin: round2(margin),
+          roi: margin > 0 ? round2((pnl / margin) * 100) : 0,
+          leverage: Math.max(Number(trade.leverage ?? "1") || 1, 1),
+          closedSize: Number(trade.closedSize ?? "0"),
+          avgEntryPrice: Number(trade.avgEntryPrice ?? "0"),
+          closedAt: new Date(closedAt).toISOString(),
+        });
+      }
+      return rows;
+    }),
+  );
+
+  return perAccount
+    .flat()
+    .sort((a, b) => Date.parse(b.closedAt) - Date.parse(a.closedAt))
+    .slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
 // Weekly highlights
 // ---------------------------------------------------------------------------
 
@@ -441,97 +526,112 @@ export async function buildAccountBalanceReports(): Promise<AccountBalanceReport
   const accounts = await storage.getTradableAccounts();
   const { start: weekStart } = weekBoundaries();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const reports: AccountBalanceReport[] = [];
 
+  // Warm ccxt market caches one at a time: Bitget 429s on concurrent public
+  // calls, which would otherwise drop accounts from the fan-out below.
   for (const account of accounts) {
-    const credentials = credentialsFor(account);
-
-    const wallet = await getExchangeWalletBalance(
-      account.exchange,
-      credentials,
-      account.name,
-      account.id,
-    );
-    if (!wallet) continue;
-
-    const pnlSnapshot = await getExchangePnlSnapshot(account.exchange, credentials);
-
-    const currentEquity = wallet.totalEquity;
-    const walletBalance = wallet.totalWalletBalance;
-    const unrealizedPnl = pnlSnapshot?.unrealizedPnl ?? wallet.totalPerpUPL;
-
-    const [sevenDayTrades, weeklyTrades] = await Promise.all([
-      getExchangeClosedPnL(account.exchange, credentials, {
-        limit: MAX_TRADES_PER_QUERY,
-        startTime: sevenDaysAgo.getTime(),
-      }),
-      getExchangeClosedPnL(account.exchange, credentials, {
-        limit: MAX_TRADES_PER_QUERY,
-        startTime: weekStart.getTime(),
-      }),
-    ]);
-
-    const last7Days = summarisePeriod(sevenDayTrades as ClosedTrade[]);
-    const thisWeek = summarisePeriod(weeklyTrades as ClosedTrade[]);
-    if (pnlSnapshot) {
-      // Bitget elite portfolios report a single running realised P&L total.
-      last7Days.pnl = round2(pnlSnapshot.realizedPnl);
-      thisWeek.pnl = round2(pnlSnapshot.realizedPnl);
-    }
-
-    const balance7DaysAgo = walletBalance - last7Days.pnl;
-    const balanceWeekStart = currentEquity - thisWeek.pnl;
-
-    reports.push({
-      accountName: account.name,
-      exchange: account.exchange,
-      currentEquity: round2(currentEquity),
-      walletBalance: round2(walletBalance),
-      unrealizedPnl: round2(unrealizedPnl),
-      balance7DaysAgo: round2(balance7DaysAgo),
-      balanceWeekStart: round2(balanceWeekStart),
-
-      tradingPnl7d: last7Days.pnl,
-      growthPercentage7d:
-        balance7DaysAgo !== 0 ? round2((last7Days.pnl / balance7DaysAgo) * 100) : 0,
-      winCount7d: last7Days.winCount,
-      lossCount7d: last7Days.lossCount,
-      winRate7d: last7Days.winRate,
-      pnlRatio7d: last7Days.pnlRatio,
-      winPnl7d: last7Days.winPnl,
-      lossPnl7d: last7Days.lossPnl,
-
-      weeklyPnl: thisWeek.pnl,
-      weeklyGrowthPercentage:
-        balanceWeekStart !== 0 ? round2((thisWeek.pnl / balanceWeekStart) * 100) : 0,
-      weeklyWinCount: thisWeek.winCount,
-      weeklyLossCount: thisWeek.lossCount,
-      weeklyWinRate: thisWeek.winRate,
-      weeklyPnlRatio: thisWeek.pnlRatio,
-      weeklyWinPnl: thisWeek.winPnl,
-      weeklyLossPnl: thisWeek.lossPnl,
-      weekStart: weekStart.toISOString(),
-      daysTrading: Math.floor((Date.now() - weekStart.getTime()) / (24 * 60 * 60 * 1000)) + 1,
-
-      positionSizes: {
-        "1%": round2(currentEquity * 0.01),
-        "2%": round2(currentEquity * 0.02),
-        "3%": round2(currentEquity * 0.03),
-        "4%": round2(currentEquity * 0.04),
-        "5%": round2(currentEquity * 0.05),
-      },
-      symbols7d: last7Days.symbols,
-      weeklySymbols: thisWeek.symbols,
-      coinBreakdown: wallet.coin
-        .filter((c) => c.usdValue > 1 || c.walletBalance > 0.001)
-        .map((c) => ({
-          coin: c.coin,
-          walletBalance: round2(c.walletBalance),
-          usdValue: round2(c.usdValue),
-        }))
-        .sort((a, b) => b.usdValue - a.usdValue),
-    });
+    await preloadExchangeClient(account.exchange, credentialsFor(account));
   }
 
-  return reports;
+  // Accounts carry independent credentials, so a slow or failing one must not
+  // serialise the rest.
+  const reports = await Promise.all(
+    accounts.map((account) => buildAccountBalanceReport(account, weekStart, sevenDaysAgo)),
+  );
+
+  return reports.filter((report): report is AccountBalanceReport => report !== null);
+}
+
+async function buildAccountBalanceReport(
+  account: Account,
+  weekStart: Date,
+  sevenDaysAgo: Date,
+): Promise<AccountBalanceReport | null> {
+  const credentials = credentialsFor(account);
+
+  const wallet = await getExchangeWalletBalance(
+    account.exchange,
+    credentials,
+    account.name,
+    account.id,
+  );
+  if (!wallet) return null;
+
+  const pnlSnapshot = await getExchangePnlSnapshot(account.exchange, credentials);
+
+  const currentEquity = wallet.totalEquity;
+  const walletBalance = wallet.totalWalletBalance;
+  const unrealizedPnl = pnlSnapshot?.unrealizedPnl ?? wallet.totalPerpUPL;
+
+  const [sevenDayTrades, weeklyTrades] = await Promise.all([
+    getExchangeClosedPnL(account.exchange, credentials, {
+      limit: MAX_TRADES_PER_QUERY,
+      startTime: sevenDaysAgo.getTime(),
+    }),
+    getExchangeClosedPnL(account.exchange, credentials, {
+      limit: MAX_TRADES_PER_QUERY,
+      startTime: weekStart.getTime(),
+    }),
+  ]);
+
+  const last7Days = summarisePeriod(sevenDayTrades as ClosedTrade[]);
+  const thisWeek = summarisePeriod(weeklyTrades as ClosedTrade[]);
+  if (pnlSnapshot) {
+    // Bitget elite portfolios report a single running realised P&L total.
+    last7Days.pnl = round2(pnlSnapshot.realizedPnl);
+    thisWeek.pnl = round2(pnlSnapshot.realizedPnl);
+  }
+
+  const balance7DaysAgo = walletBalance - last7Days.pnl;
+  const balanceWeekStart = currentEquity - thisWeek.pnl;
+
+  return {
+    accountName: account.name,
+    exchange: account.exchange,
+    currentEquity: round2(currentEquity),
+    walletBalance: round2(walletBalance),
+    unrealizedPnl: round2(unrealizedPnl),
+    balance7DaysAgo: round2(balance7DaysAgo),
+    balanceWeekStart: round2(balanceWeekStart),
+
+    tradingPnl7d: last7Days.pnl,
+    growthPercentage7d:
+      balance7DaysAgo !== 0 ? round2((last7Days.pnl / balance7DaysAgo) * 100) : 0,
+    winCount7d: last7Days.winCount,
+    lossCount7d: last7Days.lossCount,
+    winRate7d: last7Days.winRate,
+    pnlRatio7d: last7Days.pnlRatio,
+    winPnl7d: last7Days.winPnl,
+    lossPnl7d: last7Days.lossPnl,
+
+    weeklyPnl: thisWeek.pnl,
+    weeklyGrowthPercentage:
+      balanceWeekStart !== 0 ? round2((thisWeek.pnl / balanceWeekStart) * 100) : 0,
+    weeklyWinCount: thisWeek.winCount,
+    weeklyLossCount: thisWeek.lossCount,
+    weeklyWinRate: thisWeek.winRate,
+    weeklyPnlRatio: thisWeek.pnlRatio,
+    weeklyWinPnl: thisWeek.winPnl,
+    weeklyLossPnl: thisWeek.lossPnl,
+    weekStart: weekStart.toISOString(),
+    daysTrading: Math.floor((Date.now() - weekStart.getTime()) / (24 * 60 * 60 * 1000)) + 1,
+
+    positionSizes: {
+      "1%": round2(currentEquity * 0.01),
+      "2%": round2(currentEquity * 0.02),
+      "3%": round2(currentEquity * 0.03),
+      "4%": round2(currentEquity * 0.04),
+      "5%": round2(currentEquity * 0.05),
+    },
+    symbols7d: last7Days.symbols,
+    weeklySymbols: thisWeek.symbols,
+    coinBreakdown: wallet.coin
+      .filter((c) => c.usdValue > 1 || c.walletBalance > 0.001)
+      .map((c) => ({
+        coin: c.coin,
+        walletBalance: round2(c.walletBalance),
+        usdValue: round2(c.usdValue),
+      }))
+      .sort((a, b) => b.usdValue - a.usdValue),
+  };
 }

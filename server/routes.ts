@@ -15,6 +15,7 @@ import {
   aggregateWalletBalances,
   buildAccountBalanceReports,
   buildTradingReports,
+  buildTradeHistory,
   buildTrophyStats,
 } from "./trading";
 import { analyseMarket, analysePerformance, reviewStrategy } from "./ai/analyze";
@@ -191,6 +192,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       noStore(res);
       res.json(await buildTradingReports(parsed.data.timeframe));
+    }),
+  );
+
+  app.get(
+    "/api/exchange/history",
+    handler(async (req, res) => {
+      const parsed = z
+        .object({
+          // Bybit and Binance both cap a single history query, so the window is
+          // bounded here too.
+          timeframe: z.coerce.number().int().min(1).max(90).default(30),
+          exchange: z.enum(SUPPORTED_EXCHANGES).optional(),
+          symbol: z.string().max(32).optional(),
+          limit: z.coerce.number().int().min(1).max(1000).default(200),
+        })
+        .safeParse(req.query);
+      if (!parsed.success) return badRequest(res, parsed.error);
+
+      noStore(res);
+      res.json(
+        await buildTradeHistory({
+          timeframeDays: parsed.data.timeframe,
+          exchange: parsed.data.exchange,
+          symbol: parsed.data.symbol,
+          limit: parsed.data.limit,
+        }),
+      );
     }),
   );
 

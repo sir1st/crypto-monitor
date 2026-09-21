@@ -74,8 +74,9 @@ export async function getClosedPnL(options: {
   credentials?: Credentials;
   startTime?: number;
   endTime?: number;
+  cursor?: string;
 }) {
-  const { category = "linear", limit = 100, credentials, startTime, endTime } = options;
+  const { category = "linear", limit = 100, credentials, startTime, endTime, cursor } = options;
 
   try {
     const response = await createClient(credentials).getClosedPnL({
@@ -83,6 +84,7 @@ export async function getClosedPnL(options: {
       limit,
       ...(startTime ? { startTime } : {}),
       ...(endTime ? { endTime } : {}),
+      ...(cursor ? { cursor } : {}),
     });
     if (response.retCode !== 0) {
       console.error(`Closed P&L rejected: ${response.retMsg}`);

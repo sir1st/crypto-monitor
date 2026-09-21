@@ -150,6 +150,32 @@ server.registerTool(
 );
 
 server.registerTool(
+  "get_trade_history",
+  {
+    title: "Get trade history",
+    description:
+      "Individual closed trades across accounts, newest first, with margin-based ROI. Bitget elite portfolios do not expose per-fill history, so they are absent.",
+    inputSchema: {
+      timeframe: z
+        .number()
+        .int()
+        .min(1)
+        .max(90)
+        .default(30)
+        .describe("Look-back window in days (max 90 — exchange history APIs are capped)"),
+      exchange: z
+        .string()
+        .optional()
+        .describe("Filter to one exchange: bybit, binance, okx, bitget or gate"),
+      symbol: z.string().max(32).optional().describe("Filter by symbol substring, e.g. SOL"),
+      limit: z.number().int().min(1).max(1000).default(200).describe("Maximum rows to return"),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  tool((args) => api.get("/api/exchange/history", args)),
+);
+
+server.registerTool(
   "get_weekly_highlights",
   {
     title: "Get weekly highlights",

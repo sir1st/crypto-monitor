@@ -8,12 +8,13 @@ import CalculatorPage from "@/pages/calculator-page";
 import TradingPositions from "@/components/trading-positions";
 import AccountManagement from "@/components/account-management";
 import AccountAddressMap from "@/components/account-address-map";
+import TradeHistory from "@/components/trade-history";
 import { WalletStream } from "@/components/wallet-stream";
 import BybitApiStatus from "@/components/bybit-api-status";
 import MarketHours from "@/components/market-hours";
 import TradingViewChart from "@/components/trading-view-chart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, User, Settings, HelpCircle, Wallet, BarChart2, Activity, Globe, Zap, Link, Users, Maximize2, Minimize2, Expand, X, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Calculator } from "lucide-react";
+import { Bell, User, Settings, HelpCircle, Wallet, BarChart2, Activity, Globe, Zap, Link, Users, Maximize2, Minimize2, Expand, X, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Calculator, History } from "lucide-react";
 
 function ChartSection() {
   const [chartHeight, setChartHeight] = useState(600);
@@ -430,7 +431,7 @@ export default function HomePage() {
           
           <Tabs defaultValue="positions" className="w-full">
             <div className="mb-4 sm:mb-6 overflow-x-auto scrollbar-hide">
-              <TabsList className="flex w-full min-w-max sm:grid sm:grid-cols-5 sm:max-w-5xl bg-[#112240] p-1 h-auto gap-1 sm:gap-0">
+              <TabsList className="flex w-full min-w-max sm:grid sm:grid-cols-6 sm:max-w-6xl bg-[#112240] p-1 h-auto gap-1 sm:gap-0">
                 <TabsTrigger 
                   value="positions" 
                   className="flex-shrink-0 min-w-[90px] sm:min-w-0 data-[state=active]:bg-[#0a192f] data-[state=active]:text-[#00b4d8] data-[state=active]:shadow-none text-xs sm:text-sm py-3 px-3 sm:px-4 rounded-md sm:rounded-none"
@@ -466,6 +467,13 @@ export default function HomePage() {
                 >
                   <Calculator size={16} className="mr-1 sm:mr-2" />
                   <span className="whitespace-nowrap">Calculator</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="history" 
+                  className="flex-shrink-0 min-w-[90px] sm:min-w-0 data-[state=active]:bg-[#0a192f] data-[state=active]:text-[#00b4d8] data-[state=active]:shadow-none text-xs sm:text-sm py-3 px-3 sm:px-4 rounded-md sm:rounded-none"
+                >
+                  <History size={16} className="mr-1 sm:mr-2" />
+                  <span className="whitespace-nowrap">History</span>
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -550,6 +558,10 @@ export default function HomePage() {
             
             <TabsContent value="calculator" className="mt-0">
               <CalculatorPage />
+            </TabsContent>
+
+            <TabsContent value="history" className="mt-0">
+              <TradeHistory />
             </TabsContent>
           </Tabs>
         </motion.div>
