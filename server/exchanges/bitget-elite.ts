@@ -1,14 +1,14 @@
 import { createHmac } from "node:crypto";
-import type { ExchangeCredentials, StandardPosition } from "./types";
+import type { ExchangeCredentials, StandardClosedTrade, StandardPosition } from "./types";
 
 /**
  * Bitget Elite Trading (带单) reads.
  *
  * Elite portfolios live in a separate wallet from the plain Unified Account, and
- * Bitget exposes them only through the copy-trading API (`/api/v3/copy/futures/*`)
- * with a dedicated Elite Trading API key. The classic copy-trading endpoints are
- * disabled for Unified Account mode, and ccxt has no bindings for these at all,
- * so requests are signed here by hand.
+ * Bitget exposes their copy-trading side through `/api/v3/copy/futures/*` with a
+ * dedicated Elite Trading API key. The classic copy-trading endpoints are
+ * disabled for Unified Account mode, and ccxt has no bindings for any of it, so
+ * requests are signed here by hand.
  *
  * Every function returns `null` on failure: the caller fans out across accounts
  * and a key without copy-trading permission must not fail the aggregate.
@@ -16,7 +16,10 @@ import type { ExchangeCredentials, StandardPosition } from "./types";
 
 const BASE_URL = "https://api.bitget.com";
 const SUMMARY_PATH = "/api/v3/copy/futures/position-summary";
-const PROFIT_PATH = "/api/v3/copy/futures/profit-summary";
+const HISTORY_POSITIONS_PATH = "/api/v3/position/history-position";
+/** Bybit-style page caps: the API pages at 100 rows, so bound the walk. */
+const PAGE_LIMIT = 100;
+const MAX_HISTORY_PAGES = 8;
 
 interface ElitePosition {
   symbol?: string;
@@ -31,8 +34,14 @@ interface ElitePosition {
   positionValue?: string;
 }
 
-interface EliteProfitSummary {
-  totalProfit?: string;
+interface EliteClosedPosition {
+  symbol?: string;
+  openPriceAvg?: string;
+  openTotalPos?: string;
+  closeTotalPos?: string;
+  cumRealisedPnl?: string;
+  createdTime?: string;
+  updatedTime?: string;
 }
 
 async function signedGet<T>(
@@ -99,24 +108,64 @@ export async function getElitePositions(
   }));
 }
 
-/**
- * Cumulative realised P&L plus open-position unrealised P&L for the elite
- * portfolio. Bitget's copy-trading API has no time-windowed or per-fill view,
- * so the realised figure is the account's running total, not a weekly one.
- */
-export async function getElitePnl(
+/** Unrealised P&L summed over the portfolio's open positions. */
+export async function getEliteUnrealizedPnl(
   credentials: ExchangeCredentials,
-): Promise<{ realizedPnl: number; unrealizedPnl: number } | null> {
-  const [profit, positions] = await Promise.all([
-    signedGet<EliteProfitSummary>(PROFIT_PATH, credentials),
-    signedGet<ElitePosition[]>(SUMMARY_PATH, credentials),
-  ]);
-  if (profit === null) return null;
+): Promise<number | null> {
+  const positions = await signedGet<ElitePosition[]>(SUMMARY_PATH, credentials);
+  if (positions === null) return null;
 
-  const unrealizedPnl = (positions ?? []).reduce(
-    (total, p) => total + Number(p.unrealizedPnl ?? "0"),
-    0,
-  );
+  return positions.reduce((total, p) => total + Number(p.unrealizedPnl ?? "0"), 0);
+}
 
-  return { realizedPnl: Number(profit.totalProfit ?? "0"), unrealizedPnl };
+/**
+ * Closed positions from the Unified Account, cursor-paginated. Bitget exposes no
+ * per-trade leverage here, so `leverage` is left at "1" and ROI falls back to the
+ * position notional rather than committed margin.
+ */
+export async function getEliteClosedTrades(
+  credentials: ExchangeCredentials,
+  options: { startTime?: number; endTime?: number; limit?: number } = {},
+): Promise<StandardClosedTrade[] | null> {
+  const { startTime, endTime, limit = 200 } = options;
+  const trades: StandardClosedTrade[] = [];
+  let cursor: string | undefined;
+  let pages = 0;
+
+  do {
+    const query = new URLSearchParams({
+      category: "USDT-FUTURES",
+      limit: String(Math.min(limit - trades.length, PAGE_LIMIT)),
+    });
+    // Bitget rejects a startTime without an endTime.
+    if (startTime) {
+      query.set("startTime", String(startTime));
+      query.set("endTime", String(endTime ?? Date.now()));
+    }
+    if (cursor) query.set("cursor", cursor);
+
+    const data = await signedGet<{ list?: EliteClosedPosition[]; cursor?: string }>(
+      `${HISTORY_POSITIONS_PATH}?${query.toString()}`,
+      credentials,
+    );
+    if (data === null) return pages === 0 ? null : trades;
+
+    for (const position of data.list ?? []) {
+      const notional = Number(position.openTotalPos ?? "0") * Number(position.openPriceAvg ?? "0");
+      trades.push({
+        symbol: position.symbol ?? "UNKNOWN",
+        closedPnl: String(position.cumRealisedPnl ?? "0"),
+        cumEntryValue: String(notional),
+        leverage: "1",
+        closedSize: String(position.closeTotalPos ?? "0"),
+        avgEntryPrice: String(position.openPriceAvg ?? "0"),
+        createdTime: String(position.updatedTime ?? position.createdTime ?? Date.now()),
+      });
+    }
+
+    cursor = data.cursor || undefined;
+    pages += 1;
+  } while (cursor && trades.length < limit && pages < MAX_HISTORY_PAGES);
+
+  return trades.slice(0, limit);
 }

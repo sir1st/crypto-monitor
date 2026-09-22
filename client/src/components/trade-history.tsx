@@ -13,7 +13,7 @@ interface TradeHistoryEntry {
   symbol: string;
   closedPnl: number;
   margin: number;
-  roi: number;
+  roi: number | null;
   leverage: number;
   closedSize: number;
   avgEntryPrice: number;
@@ -27,9 +27,6 @@ const TIMEFRAMES = [
 ];
 
 const EXCHANGES = ["all", "bybit", "binance", "okx", "bitget", "gate"];
-
-/** Exchanges whose API exposes no per-fill history to this dashboard. */
-const NO_HISTORY_EXCHANGES = ["bitget"];
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -274,10 +271,17 @@ export default function TradeHistory() {
                       {formatCurrency(trade.closedPnl)}
                     </td>
                     <td
-                      className={`py-2 text-right font-semibold ${trade.roi >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                      className={`py-2 text-right font-semibold ${
+                        trade.roi === null
+                          ? "text-white/30"
+                          : trade.roi >= 0
+                            ? "text-emerald-400"
+                            : "text-red-400"
+                      }`}
                     >
-                      {trade.roi >= 0 ? "+" : ""}
-                      {trade.roi.toFixed(2)}%
+                      {trade.roi === null
+                        ? "—"
+                        : `${trade.roi >= 0 ? "+" : ""}${trade.roi.toFixed(2)}%`}
                     </td>
                   </tr>
                 ))}
@@ -289,9 +293,10 @@ export default function TradeHistory() {
         <div className="flex items-start gap-2 rounded-md border border-[#00b4d8]/20 bg-[#112240] p-3 text-xs text-white/60">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-[#ffc107]" />
           <span>
-            {NO_HISTORY_EXCHANGES.join(", ")} elite portfolios do not expose per-fill history, so
-            they never appear here. Bybit's API caps a single query at 7 days, so its history is
-            limited to about 90 days. Real-time positions are on the Positions tab.
+            Bybit caps a single query at 7 days, so its history is limited to about 90 days.
+            Bitget reports no per-trade leverage, so its ROI is on notional. Binance's income
+            ledger carries no notional, so its ROI shows as “—”. Real-time positions are on the
+            Positions tab.
           </span>
         </div>
       </CardContent>

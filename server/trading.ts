@@ -3,7 +3,7 @@ import {
   getExchangePositions,
   getExchangeWalletBalance,
   getExchangeClosedPnL,
-  getExchangePnlSnapshot,
+  getExchangeUnrealizedPnl,
   preloadExchangeClient,
 } from "./exchanges/manager";
 import type { ExchangeCredentials, StandardPosition } from "./exchanges/types";
@@ -260,8 +260,12 @@ export interface TradeHistoryEntry {
   symbol: string;
   closedPnl: number;
   margin: number;
-  /** Margin-based return on the trade, in percent. */
-  roi: number;
+  /**
+   * Margin-based return on the trade, in percent, or `null` when the exchange
+   * reports P&L without the notional/margin it was earned on (e.g. Binance's
+   * income ledger).
+   */
+  roi: number | null;
   leverage: number;
   closedSize: number;
   avgEntryPrice: number;
@@ -320,7 +324,7 @@ export async function buildTradeHistory(
           symbol: tradeSymbol,
           closedPnl: round2(pnl),
           margin: round2(margin),
-          roi: margin > 0 ? round2((pnl / margin) * 100) : 0,
+          roi: margin > 0 ? round2((pnl / margin) * 100) : null,
           leverage: Math.max(Number(trade.leverage ?? "1") || 1, 1),
           closedSize: Number(trade.closedSize ?? "0"),
           avgEntryPrice: Number(trade.avgEntryPrice ?? "0"),
@@ -560,30 +564,26 @@ async function buildAccountBalanceReport(
   );
   if (!wallet) return null;
 
-  const pnlSnapshot = await getExchangePnlSnapshot(account.exchange, credentials);
+  const unrealizedOverride = await getExchangeUnrealizedPnl(account.exchange, credentials);
 
   const currentEquity = wallet.totalEquity;
   const walletBalance = wallet.totalWalletBalance;
-  const unrealizedPnl = pnlSnapshot?.unrealizedPnl ?? wallet.totalPerpUPL;
+  const unrealizedPnl = unrealizedOverride ?? wallet.totalPerpUPL;
 
-  const [sevenDayTrades, weeklyTrades] = await Promise.all([
-    getExchangeClosedPnL(account.exchange, credentials, {
-      limit: MAX_TRADES_PER_QUERY,
-      startTime: sevenDaysAgo.getTime(),
-    }),
-    getExchangeClosedPnL(account.exchange, credentials, {
-      limit: MAX_TRADES_PER_QUERY,
-      startTime: weekStart.getTime(),
-    }),
-  ]);
+  // One look-back covers both windows: the week start is always within the last
+  // seven days, so the weekly subset is filtered locally. Halves the API calls
+  // and avoids hitting the same rate-limited endpoint twice at once.
+  const sevenDayTrades = (await getExchangeClosedPnL(account.exchange, credentials, {
+    limit: MAX_TRADES_PER_QUERY,
+    startTime: sevenDaysAgo.getTime(),
+    endTime: Date.now(),
+  })) as ClosedTrade[];
+  const weeklyTrades = sevenDayTrades.filter(
+    (trade) => Number(trade.createdTime ?? 0) >= weekStart.getTime(),
+  );
 
-  const last7Days = summarisePeriod(sevenDayTrades as ClosedTrade[]);
-  const thisWeek = summarisePeriod(weeklyTrades as ClosedTrade[]);
-  if (pnlSnapshot) {
-    // Bitget elite portfolios report a single running realised P&L total.
-    last7Days.pnl = round2(pnlSnapshot.realizedPnl);
-    thisWeek.pnl = round2(pnlSnapshot.realizedPnl);
-  }
+  const last7Days = summarisePeriod(sevenDayTrades);
+  const thisWeek = summarisePeriod(weeklyTrades);
 
   const balance7DaysAgo = walletBalance - last7Days.pnl;
   const balanceWeekStart = currentEquity - thisWeek.pnl;

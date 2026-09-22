@@ -9,7 +9,7 @@ import type {
   CoinBalance,
 } from "./types";
 import * as bybitNative from "../bybit-api";
-import { getElitePnl, getElitePositions } from "./bitget-elite";
+import { getEliteClosedTrades, getElitePositions, getEliteUnrealizedPnl } from "./bitget-elite";
 
 interface ClientCacheEntry {
   client: Exchange;
@@ -488,10 +488,11 @@ export async function getExchangeClosedPnL(
     }
   }
 
-  // Bitget's classic fills endpoint is disabled for Unified Accounts, and the
-  // elite copy-trading API has no per-fill history. Realised P&L is exposed as a
-  // running total through getExchangePnlSnapshot instead.
-  if (ex === "bitget") return [];
+  // Bitget's classic fills endpoint is disabled for Unified Accounts; the UTA
+  // closed-position history is the equivalent.
+  if (ex === "bitget") {
+    return (await getEliteClosedTrades(credentials, { startTime, endTime, limit })) ?? [];
+  }
 
   // For Binance, OKX, Gate: use CCXT fetchMyTrades
   try {
@@ -532,20 +533,15 @@ export async function getExchangeClosedPnL(
   }
 }
 
-export interface ExchangePnlSnapshot {
-  realizedPnl: number;
-  unrealizedPnl: number;
-}
-
 /**
- * P&L that cannot be reconstructed from closed fills, for exchanges whose API
- * only reports running totals. Currently only Bitget elite portfolios; returns
- * `null` for everything else so callers keep the trade-derived figures.
+ * Unrealised P&L for exchanges whose balance endpoint does not report it.
+ * Currently only Bitget elite portfolios; `null` for everything else so callers
+ * keep the wallet-derived figure.
  */
-export async function getExchangePnlSnapshot(
+export async function getExchangeUnrealizedPnl(
   exchange: SupportedExchange | string,
   credentials: ExchangeCredentials,
-): Promise<ExchangePnlSnapshot | null> {
+): Promise<number | null> {
   if (exchange.toLowerCase() !== "bitget") return null;
-  return getElitePnl(credentials);
+  return getEliteUnrealizedPnl(credentials);
 }
