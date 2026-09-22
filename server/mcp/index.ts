@@ -167,6 +167,7 @@ server.registerTool(
         .string()
         .optional()
         .describe("Filter to one exchange: bybit, binance, okx, bitget or gate"),
+      account: z.string().max(120).optional().describe("Filter to one account name"),
       symbol: z.string().max(32).optional().describe("Filter by symbol substring, e.g. SOL"),
       limit: z.number().int().min(1).max(1000).default(200).describe("Maximum rows to return"),
     },

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import type { Account } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,15 +60,21 @@ function exchangeBadgeStyle(exchange: string) {
 export default function TradeHistory() {
   const [timeframe, setTimeframe] = useState(30);
   const [exchange, setExchange] = useState("all");
+  const [account, setAccount] = useState("all");
   const [symbolInput, setSymbolInput] = useState("");
   const [symbol, setSymbol] = useState("");
+
+  const { data: accounts = [] } = useQuery<Account[]>({
+    queryKey: ["/api/accounts"],
+  });
 
   const url = useMemo(() => {
     const params = new URLSearchParams({ timeframe: String(timeframe), limit: "500" });
     if (exchange !== "all") params.set("exchange", exchange);
+    if (account !== "all") params.set("account", account);
     if (symbol) params.set("symbol", symbol);
     return `/api/exchange/history?${params.toString()}`;
-  }, [timeframe, exchange, symbol]);
+  }, [timeframe, exchange, account, symbol]);
 
   const { data: trades = [], isLoading, error } = useQuery<TradeHistoryEntry[]>({
     queryKey: [url],
@@ -118,6 +125,19 @@ export default function TradeHistory() {
             {EXCHANGES.map((option) => (
               <option key={option} value={option}>
                 {option === "all" ? "All exchanges" : option}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={account}
+            onChange={(event) => setAccount(event.target.value)}
+            className="h-8 rounded-md border border-[#00b4d8]/30 bg-[#112240] px-2 text-xs text-white/90"
+          >
+            <option value="all">All accounts</option>
+            {accounts.map((option) => (
+              <option key={option.name} value={option.name}>
+                {option.name}
               </option>
             ))}
           </select>

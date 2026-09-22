@@ -271,6 +271,7 @@ export interface TradeHistoryEntry {
 export interface TradeHistoryOptions {
   timeframeDays?: number;
   exchange?: string;
+  account?: string;
   symbol?: string;
   limit?: number;
 }
@@ -286,10 +287,12 @@ export const HISTORY_UNAVAILABLE_EXCHANGES = ["bitget"] as const;
 export async function buildTradeHistory(
   options: TradeHistoryOptions = {},
 ): Promise<TradeHistoryEntry[]> {
-  const { timeframeDays = 30, exchange, symbol, limit = 200 } = options;
+  const { timeframeDays = 30, exchange, account, symbol, limit = 200 } = options;
   const now = Date.now();
   const cutoff = now - timeframeDays * 24 * 60 * 60 * 1000;
-  const accounts = await storage.getTradableAccounts(exchange);
+  const accounts = (await storage.getTradableAccounts(exchange)).filter(
+    (candidate) => !account || candidate.name === account,
+  );
 
   // Accounts are independent (distinct API keys), so fetch them concurrently.
   const perAccount = await Promise.all(

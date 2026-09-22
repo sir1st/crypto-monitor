@@ -204,6 +204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // bounded here too.
           timeframe: z.coerce.number().int().min(1).max(90).default(30),
           exchange: z.enum(SUPPORTED_EXCHANGES).optional(),
+          account: z.string().max(120).optional(),
           symbol: z.string().max(32).optional(),
           limit: z.coerce.number().int().min(1).max(1000).default(200),
         })
@@ -215,6 +216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await buildTradeHistory({
           timeframeDays: parsed.data.timeframe,
           exchange: parsed.data.exchange,
+          account: parsed.data.account,
           symbol: parsed.data.symbol,
           limit: parsed.data.limit,
         }),
