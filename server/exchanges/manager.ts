@@ -109,8 +109,11 @@ export async function preloadExchangeClient(
 }
 
 function cleanSymbol(symbol: string): string {
-  // e.g. "BTC/USDT:USDT" -> "BTCUSDT", "BTC-USDT-SWAP" -> "BTCUSDT"
-  return symbol.replace(/[/:\-_]/g, "").replace(/SWAP$/i, "").toUpperCase();
+  // ccxt renders derivatives as "BASE/QUOTE:SETTLE", so drop the settle suffix
+  // before stripping separators — otherwise "HYPE/USDT:USDT" -> "HYPEUSDTUSDT".
+  // Also handles "BTC/USDT:USDT" -> "BTCUSDT" and "BTC-USDT-SWAP" -> "BTCUSDT".
+  const [base] = symbol.split(":");
+  return base.replace(/[/\-_]/g, "").replace(/SWAP$/i, "").toUpperCase();
 }
 
 /**
@@ -236,6 +239,13 @@ export async function getExchangePositions(
       const rawSide = (p.side ?? "long").toLowerCase();
       const side = rawSide === "buy" || rawSide === "long" ? "Buy" : "Sell";
       const symbol = p.symbol ? cleanSymbol(p.symbol) : "UNKNOWN";
+      const notional = Number(p.notional ?? contracts * Number(p.entryPrice ?? 0));
+      const initialMargin = Number(p.initialMargin ?? 0);
+
+      // Binance's v3 positionRisk omits `leverage`; recover it from the margin
+      // requirement (leverage = notional / initial margin).
+      const leverage =
+        Number(p.leverage ?? 0) || (initialMargin > 0 ? notional / initialMargin : 1);
 
       result.push({
         exchange: ex,
@@ -244,11 +254,11 @@ export async function getExchangePositions(
         symbol,
         side,
         size: String(contracts),
-        leverage: String(p.leverage ?? "1"),
+        leverage: String(Math.round(leverage * 100) / 100),
         avgPrice: String(p.entryPrice ?? "0"),
         markPrice: String(p.markPrice ?? "0"),
         unrealisedPnl: String(p.unrealizedPnl ?? "0"),
-        positionValue: String(p.notional ?? (contracts * Number(p.entryPrice ?? 0))),
+        positionValue: String(notional),
         liqPrice: String(p.liquidationPrice ?? "0"),
         takeProfit: "",
         stopLoss: "",
