@@ -9,7 +9,7 @@ import type {
   CoinBalance,
 } from "./types";
 import * as bybitNative from "../bybit-api";
-import { getEliteClosedTrades, getElitePositions, getEliteUnrealizedPnl } from "./bitget-elite";
+import { getBitgetWallet, getEliteClosedTrades, getElitePositions } from "./bitget-elite";
 
 interface ClientCacheEntry {
   client: Exchange;
@@ -311,8 +311,17 @@ export async function getExchangeWalletBalance(
       totalEquity: Number(summary.totalEquity ?? "0"),
       totalWalletBalance: Number(summary.totalWalletBalance ?? "0"),
       totalPerpUPL: Number(summary.totalPerpUPL ?? "0"),
+      totalInitialMargin: Number(summary.totalInitialMargin ?? "0"),
+      totalMaintenanceMargin: Number(summary.totalMaintenanceMargin ?? "0"),
       coin: coins,
     };
+  }
+
+  // Bitget's UTA balance endpoint also carries margin metrics (imr/mmr) that
+  // ccxt drops, so read it directly when possible.
+  if (ex === "bitget") {
+    const wallet = await getBitgetWallet(credentials, accountName, accountId);
+    if (wallet) return wallet;
   }
 
   // CCXT for Binance, OKX, Bitget, Gate
@@ -342,11 +351,16 @@ export async function getExchangeWalletBalance(
     const usdtTotal = totalMap["USDT"] ?? totalMap["usdt"] ?? 0;
 
     // Check exchange specific summary info first
+    let totalInitialMargin = 0;
+    let totalMaintenanceMargin = 0;
+
     if (ex === "binance") {
       const info = balance.info as Record<string, unknown>;
       totalEquity = Number(info?.totalMarginBalance ?? usdtTotal);
       totalWalletBalance = Number(info?.totalWalletBalance ?? usdtTotal);
       totalPerpUPL = Number(info?.totalUnrealizedProfit ?? 0);
+      totalInitialMargin = Number(info?.totalInitialMargin ?? 0);
+      totalMaintenanceMargin = Number(info?.totalMaintMargin ?? 0);
     } else if (ex === "okx") {
       const infoList = (balance.info as { data?: Array<Record<string, unknown>> })?.data;
       const primary = infoList?.[0];
@@ -354,6 +368,8 @@ export async function getExchangeWalletBalance(
         totalEquity = Number(primary.totalEq ?? 0);
         totalWalletBalance = Number(primary.isoEq ?? totalEquity);
         totalPerpUPL = Number(primary.upl ?? 0);
+        totalInitialMargin = Number(primary.imr ?? 0);
+        totalMaintenanceMargin = Number(primary.mmr ?? 0);
       }
     } else if (ex === "bitget") {
       // UTA's top-level `total` is equity (balance + unrealised P&L), but the
@@ -412,6 +428,8 @@ export async function getExchangeWalletBalance(
       totalEquity,
       totalWalletBalance,
       totalPerpUPL,
+      totalInitialMargin,
+      totalMaintenanceMargin,
       coin: coins.sort((a, b) => b.usdValue - a.usdValue),
     };
   } catch (error) {
@@ -557,15 +575,4 @@ export async function getExchangeClosedPnL(
   }
 }
 
-/**
- * Unrealised P&L for exchanges whose balance endpoint does not report it.
- * Currently only Bitget elite portfolios; `null` for everything else so callers
- * keep the wallet-derived figure.
- */
-export async function getExchangeUnrealizedPnl(
-  exchange: SupportedExchange | string,
-  credentials: ExchangeCredentials,
-): Promise<number | null> {
-  if (exchange.toLowerCase() !== "bitget") return null;
-  return getEliteUnrealizedPnl(credentials);
-}
+

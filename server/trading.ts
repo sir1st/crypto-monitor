@@ -3,7 +3,6 @@ import {
   getExchangePositions,
   getExchangeWalletBalance,
   getExchangeClosedPnL,
-  getExchangeUnrealizedPnl,
   preloadExchangeClient,
 } from "./exchanges/manager";
 import type { ExchangeCredentials, StandardPosition } from "./exchanges/types";
@@ -564,11 +563,9 @@ async function buildAccountBalanceReport(
   );
   if (!wallet) return null;
 
-  const unrealizedOverride = await getExchangeUnrealizedPnl(account.exchange, credentials);
-
   const currentEquity = wallet.totalEquity;
   const walletBalance = wallet.totalWalletBalance;
-  const unrealizedPnl = unrealizedOverride ?? wallet.totalPerpUPL;
+  const unrealizedPnl = wallet.totalPerpUPL;
 
   // One look-back covers both windows: the week start is always within the last
   // seven days, so the weekly subset is filtered locally. Halves the API calls

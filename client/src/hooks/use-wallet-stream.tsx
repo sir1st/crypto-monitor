@@ -8,8 +8,8 @@ interface WalletEntry {
   totalMarginBalance: string;
   totalAvailableBalance: string;
   totalPerpUPL: string;
-  totalInitialMargin: string;
-  totalMaintenanceMargin: string;
+  totalInitialMargin?: string | number;
+  totalMaintenanceMargin?: string | number;
   accountLTV: string;
   accountType: string;
   accountName?: string;

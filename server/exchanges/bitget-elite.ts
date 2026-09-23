@@ -1,5 +1,11 @@
 import { createHmac } from "node:crypto";
-import type { ExchangeCredentials, StandardClosedTrade, StandardPosition } from "./types";
+import type {
+  CoinBalance,
+  ExchangeCredentials,
+  StandardClosedTrade,
+  StandardPosition,
+  StandardWallet,
+} from "./types";
 
 /**
  * Bitget Elite Trading (带单) reads.
@@ -15,6 +21,7 @@ import type { ExchangeCredentials, StandardClosedTrade, StandardPosition } from 
  */
 
 const BASE_URL = "https://api.bitget.com";
+const ASSETS_PATH = "/api/v3/account/assets";
 const SUMMARY_PATH = "/api/v3/copy/futures/position-summary";
 const HISTORY_POSITIONS_PATH = "/api/v3/position/history-position";
 /** Bybit-style page caps: the API pages at 100 rows, so bound the walk. */
@@ -42,6 +49,14 @@ interface EliteClosedPosition {
   cumRealisedPnl?: string;
   createdTime?: string;
   updatedTime?: string;
+}
+
+interface EliteAccountAssets {
+  usdtEquity?: string;
+  usdtUnrealisedPnl?: string;
+  imr?: string;
+  mmr?: string;
+  assets?: Array<{ coin?: string; equity?: string; balance?: string; usdValue?: string }>;
 }
 
 async function signedGet<T>(
@@ -108,14 +123,39 @@ export async function getElitePositions(
   }));
 }
 
-/** Unrealised P&L summed over the portfolio's open positions. */
-export async function getEliteUnrealizedPnl(
+/**
+ * Unified-account wallet, including the margin metrics (`imr`/`mmr`) that ccxt
+ * discards when it parses the UTA balance response.
+ */
+export async function getBitgetWallet(
   credentials: ExchangeCredentials,
-): Promise<number | null> {
-  const positions = await signedGet<ElitePosition[]>(SUMMARY_PATH, credentials);
-  if (positions === null) return null;
+  accountName: string,
+  accountId?: number,
+): Promise<StandardWallet | null> {
+  const data = await signedGet<EliteAccountAssets>(ASSETS_PATH, credentials);
+  if (data === null) return null;
 
-  return positions.reduce((total, p) => total + Number(p.unrealizedPnl ?? "0"), 0);
+  const usdt = data.assets?.find((asset) => asset.coin === "USDT");
+  const coin: CoinBalance[] = (data.assets ?? [])
+    .map((asset) => ({
+      coin: asset.coin ?? "UNKNOWN",
+      walletBalance: Number(asset.balance ?? asset.equity ?? "0"),
+      usdValue: Number(asset.usdValue ?? "0"),
+    }))
+    .filter((entry) => entry.usdValue > 0.01 || entry.walletBalance > 0.001);
+
+  return {
+    exchange: "bitget",
+    accountName,
+    accountId,
+    accountType: "UNIFIED",
+    totalEquity: Number(usdt?.equity ?? data.usdtEquity ?? "0"),
+    totalWalletBalance: Number(usdt?.balance ?? "0"),
+    totalPerpUPL: Number(data.usdtUnrealisedPnl ?? "0"),
+    totalInitialMargin: Number(data.imr ?? "0"),
+    totalMaintenanceMargin: Number(data.mmr ?? "0"),
+    coin,
+  };
 }
 
 /**

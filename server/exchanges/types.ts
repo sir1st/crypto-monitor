@@ -40,6 +40,9 @@ export interface StandardWallet {
   totalEquity: number;
   totalWalletBalance: number;
   totalPerpUPL: number;
+  /** Margin metrics, when the exchange reports them (used for liquidation risk). */
+  totalInitialMargin?: number;
+  totalMaintenanceMargin?: number;
   coin: CoinBalance[];
 }
 
