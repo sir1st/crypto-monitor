@@ -585,8 +585,11 @@ async function buildAccountBalanceReport(
   const last7Days = summarisePeriod(sevenDayTrades);
   const thisWeek = summarisePeriod(weeklyTrades);
 
+  // Both windows back-derive the past balance from the wallet balance (which
+  // excludes unrealised P&L) minus realised P&L since then. Using equity for the
+  // week window would fold currently-open unrealised P&L into the base.
   const balance7DaysAgo = walletBalance - last7Days.pnl;
-  const balanceWeekStart = currentEquity - thisWeek.pnl;
+  const balanceWeekStart = walletBalance - thisWeek.pnl;
 
   return {
     accountName: account.name,

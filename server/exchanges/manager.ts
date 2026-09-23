@@ -355,23 +355,47 @@ export async function getExchangeWalletBalance(
         totalWalletBalance = Number(primary.isoEq ?? totalEquity);
         totalPerpUPL = Number(primary.upl ?? 0);
       }
+    } else if (ex === "bitget") {
+      // UTA's top-level `total` is equity (balance + unrealised P&L), but the
+      // historical-balance report needs the wallet balance *without* unrealised
+      // P&L, which only the raw asset list separates.
+      const assets = balance.info as
+        | Array<{ coin?: string; equity?: string; balance?: string; usdValue?: string }>
+        | undefined;
+      const usdt = assets?.find((asset) => asset.coin === "USDT");
+      totalEquity = Number(usdt?.equity ?? usdtTotal);
+      totalWalletBalance = Number(usdt?.balance ?? usdtTotal);
+
+      for (const asset of assets ?? []) {
+        const walletBalance = Number(asset.balance ?? asset.equity ?? "0");
+        const usdValue = Number(asset.usdValue ?? "0");
+        if (usdValue > 0.01 || walletBalance > 0.001) {
+          coins.push({
+            coin: asset.coin ?? "UNKNOWN",
+            walletBalance: Math.round(walletBalance * 10000) / 10000,
+            usdValue: Math.round(usdValue * 100) / 100,
+          });
+        }
+      }
     } else {
       // General fallback
       totalWalletBalance = Number(usdtTotal);
       totalEquity = totalWalletBalance;
     }
 
-    // Extract non-zero coin balances
-    for (const [coin, amount] of Object.entries(totalMap)) {
-      const numAmount = Number(amount ?? 0);
-      if (numAmount > 0.0001) {
-        const isUsdt = coin.toUpperCase() === "USDT" || coin.toUpperCase() === "USD";
-        const estimatedUsd = isUsdt ? numAmount : numAmount; // conservative baseline
-        coins.push({
-          coin,
-          walletBalance: Math.round(numAmount * 10000) / 10000,
-          usdValue: Math.round(estimatedUsd * 100) / 100,
-        });
+    // Extract non-zero coin balances (Bitget is handled from its raw assets above)
+    if (ex !== "bitget") {
+      for (const [coin, amount] of Object.entries(totalMap)) {
+        const numAmount = Number(amount ?? 0);
+        if (numAmount > 0.0001) {
+          const isUsdt = coin.toUpperCase() === "USDT" || coin.toUpperCase() === "USD";
+          const estimatedUsd = isUsdt ? numAmount : numAmount; // conservative baseline
+          coins.push({
+            coin,
+            walletBalance: Math.round(numAmount * 10000) / 10000,
+            usdValue: Math.round(estimatedUsd * 100) / 100,
+          });
+        }
       }
     }
 
