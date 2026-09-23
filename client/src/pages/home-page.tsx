@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link as RouterLink } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -407,6 +408,12 @@ export default function HomePage() {
           <button className="flex items-center text-[#00b4d8] border-b-2 border-[#00b4d8] px-2 py-1">
             <Activity size={16} className="mr-1" /> Positions
           </button>
+          <RouterLink
+            href="/curves"
+            className="flex items-center text-white/70 hover:text-[#00b4d8] px-2 py-1 transition-colors"
+          >
+            <TrendingUp size={16} className="mr-1" /> Curves
+          </RouterLink>
         </div>
         
       </header>
