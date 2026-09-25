@@ -53,7 +53,7 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     ],
   },
   {
-    address: "0x507e507796c7756ed5a195e9f7cf52bc39009e1d",
+    address: "0xf276a32a7d0930d0dff8775cf22dbc4535ab282a",
     ref: "66668",
     accounts: [
       { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3000U · mirror 0.1x" },
