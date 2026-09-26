@@ -56,9 +56,7 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     address: "0xf276a32a7d0930d0dff8775cf22dbc4535ab282a",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3000U · mirror 0.1x" },
-      { exchange: "bitget", accountId: "bitget_acct4", detail: "100U · mirror 0.1x" },
-      { exchange: "binance", accountId: "binance_acct1", detail: "1000U · mirror 0.1x" },
+      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3000U · mirror 0.063x" },
     ],
   },
   {
