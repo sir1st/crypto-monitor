@@ -34,37 +34,45 @@ function exchangeBadgeStyle(exchange: string) {
  */
 const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
   {
-    address: "0xa1b6d8efbcb2fb750a84dbc05649fa4968034f04",
+    address: "0xed1c710ad28e9aca013178a4e8d43a580b4b0dbf",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct1", detail: "2000U · 0.2x" },
-      { exchange: "bybit", accountId: "bybitswapu_acct3", detail: "1000U · 0.2x" },
-      { exchange: "bitget", accountId: "bitget_acct1", detail: "100U · 0.6x" },
-      { exchange: "bitget", accountId: "bitget_acct3", detail: "100U · 0.6x" },
-      { exchange: "binance", accountId: "binance_acct2", detail: "500U · 0.4x" },
+      { exchange: "bybit", accountId: "bybitswapu_acct1", detail: "2620U · ratio 1x" },
+      { exchange: "bitget", accountId: "bitget_acct1", detail: "300U · ratio 1x · force-min" },
+    ],
+  },
+  {
+    address: "0x0b9ea3cf1ec9897b04668777b02b72a33b8d087e",
+    ref: "66668",
+    accounts: [
+      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 1x" },
+      { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 1x" },
+      { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 1x · force-min" },
     ],
   },
   {
     address: "0xca83349eaee309b8143ab34ce2b33df0a0295bcd",
-    ref: "HYPER",
+    ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1000U · 0.6x" },
-      { exchange: "bitget", accountId: "bitget_acct2", detail: "100U · 0.6x" },
+      { exchange: "bybit", accountId: "bybitswapu_acct3", detail: "1060U · ratio 1x" },
+      { exchange: "bitget", accountId: "bitget_acct3", detail: "300U · ratio 1x · force-min" },
     ],
   },
   {
-    address: "0xf276a32a7d0930d0dff8775cf22dbc4535ab282a",
+    address: "0x7491180d3e43719bd8a53cdfbef27a1527a1d90f",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3000U · mirror 0.063x" },
+      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3030U · ratio 1x" },
+      { exchange: "binance", accountId: "binance_acct2", detail: "680U · ratio 1x" },
+      { exchange: "bitget", accountId: "bitget_acct4", detail: "300U · ratio 1x · force-min" },
     ],
   },
   {
-    address: "0x769232f7de58dcdb30659b34d9d51ded02537848",
+    address: "0xf97ad6704baec104d00b88e0c157e2b7b3a1ddd1",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct5", detail: "3000U · 0.1x" },
-      { exchange: "bitget", accountId: "bitget_acct5", detail: "100U · 0.6x" },
+      { exchange: "bybit", accountId: "bybitswapu_acct5", detail: "3080U · ratio 1x" },
+      { exchange: "bitget", accountId: "bitget_acct5", detail: "300U · ratio 1x · force-min" },
     ],
   },
 ];
