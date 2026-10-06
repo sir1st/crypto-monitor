@@ -42,6 +42,15 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     ],
   },
   {
+    address: "0xf276a32a7d0930d0dff8775cf22dbc4535ab282a",
+    ref: "66668",
+    accounts: [
+      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 1x" },
+      { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 1x" },
+      { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 1x · force-min" },
+    ],
+  },
+  {
     address: "0x61e9e0b9ea92e21709115425569feba8d3f0f5ab",
     ref: "66668",
     accounts: [
