@@ -235,11 +235,15 @@ export async function getExchangePositions(
     for (const p of positions ?? []) {
       const contracts = Math.abs(Number(p.contracts ?? 0));
       if (contracts <= 0 && Number(p.notional ?? 0) <= 0) continue;
+      // ccxt reports `contracts`; on Gate (and OKX) one contract is not one coin
+      // (Gate BTC_USDT = 0.0001 BTC), so convert to base-coin size for display.
+      const contractSize = Number(p.contractSize ?? 1) || 1;
+      const size = contracts * contractSize;
 
       const rawSide = (p.side ?? "long").toLowerCase();
       const side = rawSide === "buy" || rawSide === "long" ? "Buy" : "Sell";
       const symbol = p.symbol ? cleanSymbol(p.symbol) : "UNKNOWN";
-      const notional = Number(p.notional ?? contracts * Number(p.entryPrice ?? 0));
+      const notional = Number(p.notional ?? size * Number(p.entryPrice ?? 0));
       const initialMargin = Number(p.initialMargin ?? 0);
 
       // Binance's v3 positionRisk omits `leverage`; recover it from the margin
@@ -253,7 +257,7 @@ export async function getExchangePositions(
         accountId,
         symbol,
         side,
-        size: String(contracts),
+        size: String(Math.round(size * 1e8) / 1e8),
         leverage: String(Math.round(leverage * 100) / 100),
         avgPrice: String(p.entryPrice ?? "0"),
         markPrice: String(p.markPrice ?? "0"),
@@ -393,6 +397,21 @@ export async function getExchangeWalletBalance(
           });
         }
       }
+    } else if (ex === "gate") {
+      // Gate's USDT futures account: `total` is the wallet balance excluding
+      // unrealised P&L, so equity = total + unrealised_pnl.
+      const raw = balance.info as Record<string, unknown> | Array<Record<string, unknown>>;
+      const info = Array.isArray(raw)
+        ? raw.find((row) => String(row?.currency ?? "").toUpperCase() === "USDT") ?? raw[0]
+        : raw;
+      totalWalletBalance = Number(info?.total ?? usdtTotal);
+      totalPerpUPL = Number(info?.unrealised_pnl ?? 0);
+      totalEquity = totalWalletBalance + totalPerpUPL;
+      totalInitialMargin =
+        Number(info?.cross_initial_margin ?? 0) + Number(info?.isolated_position_margin ?? 0) ||
+        Number(info?.position_margin ?? 0) + Number(info?.order_margin ?? 0);
+      totalMaintenanceMargin =
+        Number(info?.cross_maintenance_margin ?? 0) || Number(info?.maintenance_margin ?? 0);
     } else {
       // General fallback
       totalWalletBalance = Number(usdtTotal);
@@ -536,7 +555,43 @@ export async function getExchangeClosedPnL(
     return (await getEliteClosedTrades(credentials, { startTime, endTime, limit })) ?? [];
   }
 
-  // For Binance, OKX, Gate: use CCXT fetchMyTrades
+  // Gate fills carry no realised P&L; the position-close history does (net of
+  // fees and funding), one row per closed position.
+  if (ex === "gate") {
+    try {
+      const client = getCcxtClient(ex, credentials);
+      await client.loadMarkets();
+      const request: Record<string, unknown> = { settle: "usdt", limit: Math.min(limit, 1000) };
+      if (startTime !== undefined) request.from = Math.floor(startTime / 1000);
+      if (endTime !== undefined) request.to = Math.floor(endTime / 1000);
+      const rows = (await (client as unknown as {
+        privateFuturesGetSettlePositionClose: (req: Record<string, unknown>) => Promise<unknown>;
+      }).privateFuturesGetSettlePositionClose(request)) as Array<Record<string, unknown>>;
+
+      return (rows ?? []).map((row) => {
+        const contract = String(row.contract ?? "UNKNOWN");
+        const market = client.safeMarket(contract, undefined, "_", "swap");
+        const contractSize = Number(market?.contractSize ?? 1) || 1;
+        // long_price is the open price of a long (close price of a short), and vice versa.
+        const entryPrice = Number(row.side === "long" ? row.long_price : row.short_price) || 0;
+        const closedSize = Math.abs(Number(row.accum_size ?? row.max_size ?? 0)) * contractSize;
+        return {
+          symbol: cleanSymbol(contract),
+          closedPnl: String(row.pnl ?? "0"),
+          cumEntryValue: String(closedSize * entryPrice),
+          leverage: "1",
+          closedSize: String(closedSize),
+          avgEntryPrice: String(entryPrice),
+          createdTime: String(Math.round(Number(row.time ?? 0) * 1000) || Date.now()),
+        };
+      });
+    } catch (error) {
+      console.error(`Fetching closed PnL from ${exchange} failed:`, error);
+      return [];
+    }
+  }
+
+  // For OKX: use CCXT fetchMyTrades
   try {
     const client = getCcxtClient(ex, credentials);
     let trades: Trade[] = [];

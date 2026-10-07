@@ -10,6 +10,8 @@ interface ExchangeAccount {
   accountId: string;
   /** Sizing note, e.g. "3000U · mirror 0.1x". */
   detail: string;
+  /** live = copy trading is running; pending = staged (enabled=false), not trading yet. */
+  status: "live" | "pending";
 }
 
 interface AccountAddressMapping {
@@ -39,111 +41,157 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     address: "0xed1c710ad28e9aca013178a4e8d43a580b4b0dbf",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct1", detail: "2620U · ratio 1x" },
-      { exchange: "bitget", accountId: "bitget_acct1", detail: "300U · ratio 1x · force-min" },
-      { exchange: "gate", accountId: "gateioswapu_gq1", detail: "2270U · ratio 1x · pending" },
+      { exchange: "bybit", accountId: "bybitswapu_acct1", detail: "2620U · ratio 1x", status: "live" },
+      { exchange: "bitget", accountId: "bitget_acct1", detail: "300U · ratio 1x · force-min", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_gq1", detail: "2270U · ratio 1x", status: "pending" },
     ],
   },
   {
     address: "0xf276a32a7d0930d0dff8775cf22dbc4535ab282a",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 1x" },
-      { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 1x" },
-      { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 1x · force-min" },
-      { exchange: "gate", accountId: "gateioswapu_gq2", detail: "2240U · ratio 1x · pending" },
+      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 1x", status: "live" },
+      { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 1x", status: "live" },
+      { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 1x · force-min", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_gq2", detail: "2240U · ratio 1x", status: "pending" },
     ],
   },
   {
     address: "0x61e9e0b9ea92e21709115425569feba8d3f0f5ab",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct3", detail: "1060U · ratio 1x" },
-      { exchange: "bitget", accountId: "bitget_acct3", detail: "300U · ratio 1x · force-min" },
-      { exchange: "gate", accountId: "gateioswapu_gq4", detail: "2250U · ratio 0.5x · pending" },
+      { exchange: "bybit", accountId: "bybitswapu_acct3", detail: "1060U · ratio 1x", status: "live" },
+      { exchange: "bitget", accountId: "bitget_acct3", detail: "300U · ratio 1x · force-min", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_gq4", detail: "2250U · ratio 0.5x", status: "pending" },
     ],
   },
   {
     address: "0x7491180d3e43719bd8a53cdfbef27a1527a1d90f",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3030U · ratio 1x" },
-      { exchange: "binance", accountId: "binance_acct2", detail: "680U · ratio 1x" },
-      { exchange: "bitget", accountId: "bitget_acct4", detail: "300U · ratio 1x · force-min" },
+      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3030U · ratio 1x", status: "live" },
+      { exchange: "binance", accountId: "binance_acct2", detail: "680U · ratio 1x", status: "live" },
+      { exchange: "bitget", accountId: "bitget_acct4", detail: "300U · ratio 1x · force-min", status: "live" },
     ],
   },
   {
     address: "0xf97ad6704baec104d00b88e0c157e2b7b3a1ddd1",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct5", detail: "3080U · ratio 2x" },
-      { exchange: "bitget", accountId: "bitget_acct5", detail: "300U · ratio 2x · force-min" },
-      { exchange: "gate", accountId: "gateioswapu_gq3", detail: "2740U · ratio 2x · pending" },
+      { exchange: "bybit", accountId: "bybitswapu_acct5", detail: "3080U · ratio 2x", status: "live" },
+      { exchange: "bitget", accountId: "bitget_acct5", detail: "300U · ratio 2x · force-min", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_gq3", detail: "2740U · ratio 2x", status: "pending" },
     ],
   },
   {
     address: "0xb20af39c74a7b532221837397e510f5a28c41b05",
     ref: "66668",
     accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx1", detail: "1990U · ratio 1x · pending" },
+      { exchange: "gate", accountId: "gateioswapu_hx1", detail: "1990U · ratio 1x", status: "pending" },
     ],
   },
   {
     address: "0x15baf1cefcced43e971da85b7b4de5a0391f7b29",
     ref: "66668",
     accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx2", detail: "2030U · ratio 3x · pending" },
+      { exchange: "gate", accountId: "gateioswapu_hx2", detail: "2030U · ratio 3x", status: "pending" },
     ],
   },
   {
     address: "0xafe4b3fb69024f240dce32270dede23c85154a21",
     ref: "66668",
     accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx3", detail: "2020U · ratio 2x · pending" },
+      { exchange: "gate", accountId: "gateioswapu_hx3", detail: "2020U · ratio 2x", status: "pending" },
     ],
   },
   {
     address: "0xa4ac1d48fe393ac94e7f9480af8abd9360abf48a",
     ref: "66668",
     accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx4", detail: "1990U · ratio 5x · pending" },
-      { exchange: "gate", accountId: "gateioswapu_siji05", detail: "200U · ratio 5x · force-min" },
+      { exchange: "gate", accountId: "gateioswapu_hx4", detail: "1990U · ratio 5x", status: "pending" },
+      { exchange: "gate", accountId: "gateioswapu_siji05", detail: "200U · ratio 5x · force-min", status: "live" },
     ],
   },
   {
     address: "0xac142fee46f8dacbfef23e1e41d79f1f7233487e",
     ref: "66668",
     accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx5", detail: "2010U · ratio 1x · pending" },
+      { exchange: "gate", accountId: "gateioswapu_hx5", detail: "2010U · ratio 1x", status: "pending" },
     ],
   },
   {
     address: "0xa4178e3b8d7799cd472ceeb63b302b4a1344da19",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct6", detail: "78U · ratio 1x · pending" },
+      { exchange: "bybit", accountId: "bybitswapu_acct6", detail: "78U · ratio 1x", status: "pending" },
     ],
   },
 ];
 
+function StatusBadge({ status }: { status: ExchangeAccount["status"] }) {
+  return status === "live" ? (
+    <Badge
+      variant="outline"
+      className="text-[10px] font-mono px-1.5 py-0 gap-1 bg-emerald-500/15 text-emerald-400 border-emerald-500/40"
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+      LIVE
+    </Badge>
+  ) : (
+    <Badge
+      variant="outline"
+      className="text-[10px] font-mono px-1.5 py-0 border-dashed bg-transparent text-white/45 border-white/25"
+    >
+      PENDING
+    </Badge>
+  );
+}
+
 function AccountCell({ account }: { account: ExchangeAccount }) {
+  const pending = account.status === "pending";
   return (
-    <div>
+    <div
+      className={
+        pending
+          ? "opacity-50 border-l-2 border-dashed border-white/20 pl-2"
+          : "border-l-2 border-emerald-500/60 pl-2"
+      }
+    >
       <div className="flex items-center gap-2">
-        <span className="text-white/90 font-medium">{account.accountId}</span>
+        <span className={pending ? "text-white/70 font-medium" : "text-white/90 font-medium"}>
+          {account.accountId}
+        </span>
         <Badge
           variant="outline"
           className={`text-[10px] uppercase font-mono px-1.5 py-0 ${exchangeBadgeStyle(account.exchange)}`}
         >
           {account.exchange}
         </Badge>
+        <StatusBadge status={account.status} />
       </div>
       <div className="text-white/50 text-xs">{account.detail}</div>
     </div>
   );
 }
 
+/** Live accounts first, then pending; stable otherwise. */
+function sortedAccounts(accounts: ExchangeAccount[]): ExchangeAccount[] {
+  return [...accounts].sort(
+    (a, b) => Number(a.status === "pending") - Number(b.status === "pending"),
+  );
+}
+
 export default function AccountAddressMap() {
+  const all = ACCOUNT_ADDRESS_MAPPINGS.flatMap((mapping) => mapping.accounts);
+  const liveCount = all.filter((account) => account.status === "live").length;
+  const pendingCount = all.length - liveCount;
+  // Addresses with at least one live account first.
+  const mappings = [...ACCOUNT_ADDRESS_MAPPINGS].sort(
+    (a, b) =>
+      Number(!a.accounts.some((x) => x.status === "live")) -
+      Number(!b.accounts.some((x) => x.status === "live")),
+  );
+
   return (
     <Card className="bg-[#0d2538] border-[#00b4d8]/20">
       <CardHeader>
@@ -155,6 +203,13 @@ export default function AccountAddressMap() {
           Each HyperX trader address and the exchange accounts it mirrors. Click an address to open
           it.
         </CardDescription>
+        <div className="flex items-center gap-2 pt-1">
+          <StatusBadge status="live" />
+          <span className="text-white/80 text-xs font-mono">{liveCount} 跟单中</span>
+          <span className="text-white/20">|</span>
+          <StatusBadge status="pending" />
+          <span className="text-white/50 text-xs font-mono">{pendingCount} 未上线</span>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -166,31 +221,35 @@ export default function AccountAddressMap() {
               </tr>
             </thead>
             <tbody>
-              {ACCOUNT_ADDRESS_MAPPINGS.map((mapping, index) => (
-                <tr
-                  key={`${mapping.address}-${index}`}
-                  className="border-b border-white/5 last:border-0 hover:bg-[#00b4d8]/5 transition-colors align-top"
-                >
-                  <td className="py-3 pr-4">
-                    <a
-                      href={traderUrl(mapping.address, mapping.ref)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[#00b4d8] hover:text-[#00b4d8]/80 font-mono text-xs break-all"
-                    >
-                      {mapping.address}
-                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                    </a>
-                  </td>
-                  <td className="py-3">
-                    <div className="space-y-2">
-                      {mapping.accounts.map((account) => (
-                        <AccountCell key={account.accountId} account={account} />
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {mappings.map((mapping, index) => {
+                const anyLive = mapping.accounts.some((account) => account.status === "live");
+                return (
+                  <tr
+                    key={`${mapping.address}-${index}`}
+                    className="border-b border-white/5 last:border-0 hover:bg-[#00b4d8]/5 transition-colors align-top"
+                  >
+                    <td className={anyLive ? "py-3 pr-4" : "py-3 pr-4 opacity-50"}>
+                      <a
+                        href={traderUrl(mapping.address, mapping.ref)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[#00b4d8] hover:text-[#00b4d8]/80 font-mono text-xs break-all"
+                      >
+                        {mapping.address}
+                        <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                      </a>
+                      {!anyLive && <div className="text-white/40 text-[10px] mt-1">无账户在跟</div>}
+                    </td>
+                    <td className="py-3">
+                      <div className="space-y-2">
+                        {sortedAccounts(mapping.accounts).map((account) => (
+                          <AccountCell key={account.accountId} account={account} />
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
