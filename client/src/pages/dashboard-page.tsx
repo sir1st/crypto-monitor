@@ -150,7 +150,7 @@ export default function DashboardPage() {
       const response = await apiRequest('GET', '/api/trophy-stats');
       return response.json();
     },
-    refetchInterval: 5000,
+    refetchInterval: 10000, // server caches closed PnL for 120s
     staleTime: 0, // Override global setting - always consider data stale
   });
 
@@ -166,7 +166,7 @@ export default function DashboardPage() {
       console.log('📊 Full trading reports data:', data);
       return data;
     },
-    refetchInterval: 5000, // Refresh every 5 seconds for live data
+    refetchInterval: 10000, // server caches closed PnL for 120s
   });
 
   // Account Balance Data - Real-time balance analysis like Python script

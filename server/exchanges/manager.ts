@@ -10,6 +10,8 @@ import type {
 } from "./types";
 import * as bybitNative from "../bybit-api";
 import { getBitgetWallet, getEliteClosedTrades, getElitePositions } from "./bitget-elite";
+import { cachedFetch } from "./cache";
+import { assertBinanceBudget, recordBinanceFailure, recordBinanceResponse } from "./binance-guard";
 
 interface ClientCacheEntry {
   client: Exchange;
@@ -25,6 +27,35 @@ const BYBIT_PAGE_LIMIT = 100;
 const BYBIT_MAX_PAGES_PER_WINDOW = 3;
 /** Bound the native history walk to 13 weekly windows (~91 days) per account. */
 const BYBIT_MAX_LOOKBACK_MS = 13 * BYBIT_WINDOW_MS;
+
+/**
+ * Shared per-account cache TTLs. The dashboard shares its outbound IP with the
+ * trading bot, so reads are cached server-side and shared by every open tab.
+ */
+const POSITIONS_TTL_MS = 30_000;
+const WALLET_TTL_MS = 60_000;
+const CLOSED_PNL_TTL_MS = 120_000;
+
+/**
+ * Run a ccxt call; for Binance, honour the IP-weight guard first and record the
+ * weight / rate-limit headers afterwards. Other exchanges pass straight through.
+ */
+async function guarded<T>(exchange: string, client: Exchange, call: () => Promise<T>): Promise<T> {
+  if (exchange !== "binance") return call();
+  assertBinanceBudget();
+  try {
+    const result = await call();
+    recordBinanceResponse(client.last_response_headers);
+    return result;
+  } catch (error) {
+    recordBinanceFailure(error, client.last_response_headers);
+    throw error;
+  }
+}
+
+function accountKey(exchange: string, credentials: ExchangeCredentials, accountId?: number): string {
+  return `${exchange.toLowerCase()}:${accountId ?? "-"}:${credentials.apiKey}:${credentials.passphrase ?? ""}`;
+}
 
 function getCacheKey(exchange: string, credentials?: ExchangeCredentials): string {
   return `${exchange}:${credentials?.apiKey ?? "public"}:${credentials?.passphrase ?? ""}`;
@@ -101,7 +132,9 @@ export async function preloadExchangeClient(
   if (exchange.toLowerCase() === "bybit") return;
 
   try {
-    await getCcxtClient(exchange, credentials).loadMarkets();
+    const ex = exchange.toLowerCase();
+    const client = getCcxtClient(ex, credentials);
+    await guarded(ex, client, () => client.loadMarkets());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Preloading ${exchange} markets failed: ${message}`);
@@ -144,14 +177,14 @@ export async function testExchangeConnection(
     // Public time probe
     let serverTime: number | undefined;
     try {
-      serverTime = await client.fetchTime();
+      serverTime = await guarded(ex, client, () => client.fetchTime());
     } catch {
       // Not fatal if exchange doesn't support fetchTime
     }
 
     // Authenticated probe
     if (credentials?.apiKey && credentials?.apiSecret) {
-      await client.fetchBalance();
+      await guarded(ex, client, () => client.fetchBalance());
       return {
         success: true,
         publicAccess: true,
@@ -180,9 +213,26 @@ export async function testExchangeConnection(
 }
 
 /**
- * Fetch positions across supported exchanges
+ * Fetch positions across supported exchanges (cached per account, shared by all
+ * callers; on failure the last good snapshot is served).
  */
 export async function getExchangePositions(
+  exchange: SupportedExchange | string,
+  credentials: ExchangeCredentials,
+  accountName = "Account",
+  accountId?: number,
+): Promise<StandardPosition[]> {
+  return cachedFetch(
+    `positions:${accountKey(exchange, credentials, accountId)}`,
+    POSITIONS_TTL_MS,
+    () => fetchPositionsUncached(exchange, credentials, accountName, accountId),
+    [],
+    `Fetching positions from ${exchange} for ${accountName}`,
+  );
+}
+
+/** Throws on failure so the cache can tell "no positions" from "request failed". */
+async function fetchPositionsUncached(
   exchange: SupportedExchange | string,
   credentials: ExchangeCredentials,
   accountName = "Account",
@@ -197,7 +247,7 @@ export async function getExchangePositions(
       apiSecret: credentials.apiSecret,
     });
 
-    if (!rawPositions) return [];
+    if (!rawPositions) throw new Error("Bybit positions request failed");
 
     return rawPositions.map((p) => ({
       exchange: "bybit",
@@ -227,62 +277,74 @@ export async function getExchangePositions(
   }
 
   // Use CCXT for Binance, OKX, Bitget, Gate
-  try {
-    const client = getCcxtClient(ex, credentials);
-    const positions = await client.fetchPositions();
-    const result: StandardPosition[] = [];
+  const client = getCcxtClient(ex, credentials);
+  const positions = await guarded(ex, client, () => client.fetchPositions());
+  const result: StandardPosition[] = [];
 
-    for (const p of positions ?? []) {
-      const contracts = Math.abs(Number(p.contracts ?? 0));
-      if (contracts <= 0 && Number(p.notional ?? 0) <= 0) continue;
-      // ccxt reports `contracts`; on Gate (and OKX) one contract is not one coin
-      // (Gate BTC_USDT = 0.0001 BTC), so convert to base-coin size for display.
-      const contractSize = Number(p.contractSize ?? 1) || 1;
-      const size = contracts * contractSize;
+  for (const p of positions ?? []) {
+    const contracts = Math.abs(Number(p.contracts ?? 0));
+    if (contracts <= 0 && Number(p.notional ?? 0) <= 0) continue;
+    // ccxt reports `contracts`; on Gate (and OKX) one contract is not one coin
+    // (Gate BTC_USDT = 0.0001 BTC), so convert to base-coin size for display.
+    const contractSize = Number(p.contractSize ?? 1) || 1;
+    const size = contracts * contractSize;
 
-      const rawSide = (p.side ?? "long").toLowerCase();
-      const side = rawSide === "buy" || rawSide === "long" ? "Buy" : "Sell";
-      const symbol = p.symbol ? cleanSymbol(p.symbol) : "UNKNOWN";
-      const notional = Number(p.notional ?? size * Number(p.entryPrice ?? 0));
-      const initialMargin = Number(p.initialMargin ?? 0);
+    const rawSide = (p.side ?? "long").toLowerCase();
+    const side = rawSide === "buy" || rawSide === "long" ? "Buy" : "Sell";
+    const symbol = p.symbol ? cleanSymbol(p.symbol) : "UNKNOWN";
+    const notional = Number(p.notional ?? size * Number(p.entryPrice ?? 0));
+    const initialMargin = Number(p.initialMargin ?? 0);
 
-      // Binance's v3 positionRisk omits `leverage`; recover it from the margin
-      // requirement (leverage = notional / initial margin).
-      const leverage =
-        Number(p.leverage ?? 0) || (initialMargin > 0 ? notional / initialMargin : 1);
+    // Binance's v3 positionRisk omits `leverage`; recover it from the margin
+    // requirement (leverage = notional / initial margin).
+    const leverage =
+      Number(p.leverage ?? 0) || (initialMargin > 0 ? notional / initialMargin : 1);
 
-      result.push({
-        exchange: ex,
-        accountName,
-        accountId,
-        symbol,
-        side,
-        size: String(Math.round(size * 1e8) / 1e8),
-        leverage: String(Math.round(leverage * 100) / 100),
-        avgPrice: String(p.entryPrice ?? "0"),
-        markPrice: String(p.markPrice ?? "0"),
-        unrealisedPnl: String(p.unrealizedPnl ?? "0"),
-        positionValue: String(notional),
-        liqPrice: String(p.liquidationPrice ?? "0"),
-        takeProfit: "",
-        stopLoss: "",
-        positionStatus: "Normal",
-        cumRealisedPnl: "0",
-        updatedTime: String(p.timestamp ?? Date.now()),
-      });
-    }
-
-    return result;
-  } catch (error) {
-    console.error(`Fetching positions from ${exchange} for ${accountName} failed:`, error);
-    return [];
+    result.push({
+      exchange: ex,
+      accountName,
+      accountId,
+      symbol,
+      side,
+      size: String(Math.round(size * 1e8) / 1e8),
+      leverage: String(Math.round(leverage * 100) / 100),
+      avgPrice: String(p.entryPrice ?? "0"),
+      markPrice: String(p.markPrice ?? "0"),
+      unrealisedPnl: String(p.unrealizedPnl ?? "0"),
+      positionValue: String(notional),
+      liqPrice: String(p.liquidationPrice ?? "0"),
+      takeProfit: "",
+      stopLoss: "",
+      positionStatus: "Normal",
+      cumRealisedPnl: "0",
+      updatedTime: String(p.timestamp ?? Date.now()),
+    });
   }
+
+  return result;
 }
 
 /**
- * Fetch wallet balance across supported exchanges
+ * Fetch wallet balance across supported exchanges (cached per account; on
+ * failure the last good balance is served).
  */
 export async function getExchangeWalletBalance(
+  exchange: SupportedExchange | string,
+  credentials: ExchangeCredentials,
+  accountName = "Account",
+  accountId?: number,
+): Promise<StandardWallet | null> {
+  return cachedFetch<StandardWallet | null>(
+    `wallet:${accountKey(exchange, credentials, accountId)}`,
+    WALLET_TTL_MS,
+    () => fetchWalletUncached(exchange, credentials, accountName, accountId),
+    null,
+    `Fetching wallet balance from ${exchange} for ${accountName}`,
+  );
+}
+
+/** Throws on failure so the cache can serve the last good balance. */
+async function fetchWalletUncached(
   exchange: SupportedExchange | string,
   credentials: ExchangeCredentials,
   accountName = "Account",
@@ -297,7 +359,7 @@ export async function getExchangeWalletBalance(
       apiSecret: credentials.apiSecret,
     });
     const summary = raw?.list?.[0];
-    if (!summary) return null;
+    if (!summary) throw new Error("Bybit wallet balance request failed");
 
     const coins: CoinBalance[] = (summary.coin ?? [])
       .map((c) => ({
@@ -329,138 +391,152 @@ export async function getExchangeWalletBalance(
   }
 
   // CCXT for Binance, OKX, Bitget, Gate
-  try {
-    const client = getCcxtClient(ex, credentials);
+  const client = getCcxtClient(ex, credentials);
 
-    // Bitget accounts running in Unified Account (UTA) mode reject the classic
-    // balance API, so a plain fetchBalance() returns an empty structure. Ask for
-    // the UTA endpoint and fall back to the classic call for non-UTA accounts.
-    let balance: Awaited<ReturnType<Exchange["fetchBalance"]>>;
-    if (ex === "bitget") {
-      try {
-        balance = await client.fetchBalance({ uta: true });
-      } catch {
-        balance = await client.fetchBalance();
-      }
-    } else {
+  // Bitget accounts running in Unified Account (UTA) mode reject the classic
+  // balance API, so a plain fetchBalance() returns an empty structure. Ask for
+  // the UTA endpoint and fall back to the classic call for non-UTA accounts.
+  let balance: Awaited<ReturnType<Exchange["fetchBalance"]>>;
+  if (ex === "bitget") {
+    try {
+      balance = await client.fetchBalance({ uta: true });
+    } catch {
       balance = await client.fetchBalance();
     }
-
-    const coins: CoinBalance[] = [];
-    let totalEquity = 0;
-    let totalWalletBalance = 0;
-    let totalPerpUPL = 0;
-
-    const totalMap = ((balance.total ?? {}) as unknown) as Record<string, number | undefined>;
-    const usdtTotal = totalMap["USDT"] ?? totalMap["usdt"] ?? 0;
-
-    // Check exchange specific summary info first
-    let totalInitialMargin = 0;
-    let totalMaintenanceMargin = 0;
-
-    if (ex === "binance") {
-      const info = balance.info as Record<string, unknown>;
-      totalEquity = Number(info?.totalMarginBalance ?? usdtTotal);
-      totalWalletBalance = Number(info?.totalWalletBalance ?? usdtTotal);
-      totalPerpUPL = Number(info?.totalUnrealizedProfit ?? 0);
-      totalInitialMargin = Number(info?.totalInitialMargin ?? 0);
-      totalMaintenanceMargin = Number(info?.totalMaintMargin ?? 0);
-    } else if (ex === "okx") {
-      const infoList = (balance.info as { data?: Array<Record<string, unknown>> })?.data;
-      const primary = infoList?.[0];
-      if (primary) {
-        totalEquity = Number(primary.totalEq ?? 0);
-        totalWalletBalance = Number(primary.isoEq ?? totalEquity);
-        totalPerpUPL = Number(primary.upl ?? 0);
-        totalInitialMargin = Number(primary.imr ?? 0);
-        totalMaintenanceMargin = Number(primary.mmr ?? 0);
-      }
-    } else if (ex === "bitget") {
-      // UTA's top-level `total` is equity (balance + unrealised P&L), but the
-      // historical-balance report needs the wallet balance *without* unrealised
-      // P&L, which only the raw asset list separates.
-      const assets = balance.info as
-        | Array<{ coin?: string; equity?: string; balance?: string; usdValue?: string }>
-        | undefined;
-      const usdt = assets?.find((asset) => asset.coin === "USDT");
-      totalEquity = Number(usdt?.equity ?? usdtTotal);
-      totalWalletBalance = Number(usdt?.balance ?? usdtTotal);
-
-      for (const asset of assets ?? []) {
-        const walletBalance = Number(asset.balance ?? asset.equity ?? "0");
-        const usdValue = Number(asset.usdValue ?? "0");
-        if (usdValue > 0.01 || walletBalance > 0.001) {
-          coins.push({
-            coin: asset.coin ?? "UNKNOWN",
-            walletBalance: Math.round(walletBalance * 10000) / 10000,
-            usdValue: Math.round(usdValue * 100) / 100,
-          });
-        }
-      }
-    } else if (ex === "gate") {
-      // Gate's USDT futures account: `total` is the wallet balance excluding
-      // unrealised P&L, so equity = total + unrealised_pnl.
-      const raw = balance.info as Record<string, unknown> | Array<Record<string, unknown>>;
-      const info = Array.isArray(raw)
-        ? raw.find((row) => String(row?.currency ?? "").toUpperCase() === "USDT") ?? raw[0]
-        : raw;
-      totalWalletBalance = Number(info?.total ?? usdtTotal);
-      totalPerpUPL = Number(info?.unrealised_pnl ?? 0);
-      totalEquity = totalWalletBalance + totalPerpUPL;
-      totalInitialMargin =
-        Number(info?.cross_initial_margin ?? 0) + Number(info?.isolated_position_margin ?? 0) ||
-        Number(info?.position_margin ?? 0) + Number(info?.order_margin ?? 0);
-      totalMaintenanceMargin =
-        Number(info?.cross_maintenance_margin ?? 0) || Number(info?.maintenance_margin ?? 0);
-    } else {
-      // General fallback
-      totalWalletBalance = Number(usdtTotal);
-      totalEquity = totalWalletBalance;
-    }
-
-    // Extract non-zero coin balances (Bitget is handled from its raw assets above)
-    if (ex !== "bitget") {
-      for (const [coin, amount] of Object.entries(totalMap)) {
-        const numAmount = Number(amount ?? 0);
-        if (numAmount > 0.0001) {
-          const isUsdt = coin.toUpperCase() === "USDT" || coin.toUpperCase() === "USD";
-          const estimatedUsd = isUsdt ? numAmount : numAmount; // conservative baseline
-          coins.push({
-            coin,
-            walletBalance: Math.round(numAmount * 10000) / 10000,
-            usdValue: Math.round(estimatedUsd * 100) / 100,
-          });
-        }
-      }
-    }
-
-    if (totalEquity === 0 && coins.length > 0) {
-      totalEquity = coins.reduce((sum, c) => sum + c.usdValue, 0);
-      totalWalletBalance = totalEquity;
-    }
-
-    return {
-      exchange: ex,
-      accountName,
-      accountId,
-      accountType: "UNIFIED",
-      totalEquity,
-      totalWalletBalance,
-      totalPerpUPL,
-      totalInitialMargin,
-      totalMaintenanceMargin,
-      coin: coins.sort((a, b) => b.usdValue - a.usdValue),
-    };
-  } catch (error) {
-    console.error(`Fetching wallet balance from ${exchange} for ${accountName} failed:`, error);
-    return null;
+  } else {
+    balance = await guarded(ex, client, () => client.fetchBalance());
   }
+
+  const coins: CoinBalance[] = [];
+  let totalEquity = 0;
+  let totalWalletBalance = 0;
+  let totalPerpUPL = 0;
+
+  const totalMap = ((balance.total ?? {}) as unknown) as Record<string, number | undefined>;
+  const usdtTotal = totalMap["USDT"] ?? totalMap["usdt"] ?? 0;
+
+  // Check exchange specific summary info first
+  let totalInitialMargin = 0;
+  let totalMaintenanceMargin = 0;
+
+  if (ex === "binance") {
+    const info = balance.info as Record<string, unknown>;
+    totalEquity = Number(info?.totalMarginBalance ?? usdtTotal);
+    totalWalletBalance = Number(info?.totalWalletBalance ?? usdtTotal);
+    totalPerpUPL = Number(info?.totalUnrealizedProfit ?? 0);
+    totalInitialMargin = Number(info?.totalInitialMargin ?? 0);
+    totalMaintenanceMargin = Number(info?.totalMaintMargin ?? 0);
+  } else if (ex === "okx") {
+    const infoList = (balance.info as { data?: Array<Record<string, unknown>> })?.data;
+    const primary = infoList?.[0];
+    if (primary) {
+      totalEquity = Number(primary.totalEq ?? 0);
+      totalWalletBalance = Number(primary.isoEq ?? totalEquity);
+      totalPerpUPL = Number(primary.upl ?? 0);
+      totalInitialMargin = Number(primary.imr ?? 0);
+      totalMaintenanceMargin = Number(primary.mmr ?? 0);
+    }
+  } else if (ex === "bitget") {
+    // UTA's top-level `total` is equity (balance + unrealised P&L), but the
+    // historical-balance report needs the wallet balance *without* unrealised
+    // P&L, which only the raw asset list separates.
+    const assets = balance.info as
+      | Array<{ coin?: string; equity?: string; balance?: string; usdValue?: string }>
+      | undefined;
+    const usdt = assets?.find((asset) => asset.coin === "USDT");
+    totalEquity = Number(usdt?.equity ?? usdtTotal);
+    totalWalletBalance = Number(usdt?.balance ?? usdtTotal);
+
+    for (const asset of assets ?? []) {
+      const walletBalance = Number(asset.balance ?? asset.equity ?? "0");
+      const usdValue = Number(asset.usdValue ?? "0");
+      if (usdValue > 0.01 || walletBalance > 0.001) {
+        coins.push({
+          coin: asset.coin ?? "UNKNOWN",
+          walletBalance: Math.round(walletBalance * 10000) / 10000,
+          usdValue: Math.round(usdValue * 100) / 100,
+        });
+      }
+    }
+  } else if (ex === "gate") {
+    // Gate's USDT futures account: `total` is the wallet balance excluding
+    // unrealised P&L, so equity = total + unrealised_pnl.
+    const raw = balance.info as Record<string, unknown> | Array<Record<string, unknown>>;
+    const info = Array.isArray(raw)
+      ? raw.find((row) => String(row?.currency ?? "").toUpperCase() === "USDT") ?? raw[0]
+      : raw;
+    totalWalletBalance = Number(info?.total ?? usdtTotal);
+    totalPerpUPL = Number(info?.unrealised_pnl ?? 0);
+    totalEquity = totalWalletBalance + totalPerpUPL;
+    totalInitialMargin =
+      Number(info?.cross_initial_margin ?? 0) + Number(info?.isolated_position_margin ?? 0) ||
+      Number(info?.position_margin ?? 0) + Number(info?.order_margin ?? 0);
+    totalMaintenanceMargin =
+      Number(info?.cross_maintenance_margin ?? 0) || Number(info?.maintenance_margin ?? 0);
+  } else {
+    // General fallback
+    totalWalletBalance = Number(usdtTotal);
+    totalEquity = totalWalletBalance;
+  }
+
+  // Extract non-zero coin balances (Bitget is handled from its raw assets above)
+  if (ex !== "bitget") {
+    for (const [coin, amount] of Object.entries(totalMap)) {
+      const numAmount = Number(amount ?? 0);
+      if (numAmount > 0.0001) {
+        const isUsdt = coin.toUpperCase() === "USDT" || coin.toUpperCase() === "USD";
+        const estimatedUsd = isUsdt ? numAmount : numAmount; // conservative baseline
+        coins.push({
+          coin,
+          walletBalance: Math.round(numAmount * 10000) / 10000,
+          usdValue: Math.round(estimatedUsd * 100) / 100,
+        });
+      }
+    }
+  }
+
+  if (totalEquity === 0 && coins.length > 0) {
+    totalEquity = coins.reduce((sum, c) => sum + c.usdValue, 0);
+    totalWalletBalance = totalEquity;
+  }
+
+  return {
+    exchange: ex,
+    accountName,
+    accountId,
+    accountType: "UNIFIED",
+    totalEquity,
+    totalWalletBalance,
+    totalPerpUPL,
+    totalInitialMargin,
+    totalMaintenanceMargin,
+    coin: coins.sort((a, b) => b.usdValue - a.usdValue),
+  };
 }
 
 /**
- * Fetch closed PnL / trade executions for performance reports
+ * Fetch closed PnL / trade executions for performance reports (cached per
+ * account and window; time bounds are bucketed to the TTL so "last N days"
+ * callers share an entry).
  */
 export async function getExchangeClosedPnL(
+  exchange: SupportedExchange | string,
+  credentials: ExchangeCredentials,
+  options: { startTime?: number; endTime?: number; limit?: number } = {},
+): Promise<StandardClosedTrade[]> {
+  const bucket = (t?: number) => (t === undefined ? "-" : Math.floor(t / CLOSED_PNL_TTL_MS));
+  const key = `closed:${accountKey(exchange, credentials)}:${options.limit ?? 200}:${bucket(options.startTime)}:${bucket(options.endTime)}`;
+  return cachedFetch(
+    key,
+    CLOSED_PNL_TTL_MS,
+    () => fetchClosedPnLUncached(exchange, credentials, options),
+    [],
+    `Fetching closed PnL from ${exchange}`,
+  );
+}
+
+/** Throws on failure so the cache can serve the last good history. */
+async function fetchClosedPnLUncached(
   exchange: SupportedExchange | string,
   credentials: ExchangeCredentials,
   options: { startTime?: number; endTime?: number; limit?: number } = {},
@@ -497,6 +573,7 @@ export async function getExchangeClosedPnL(
           endTime: windowEnd,
           cursor,
         });
+        if (raw === null) throw new Error("Bybit closed PnL request failed");
         if (!raw?.list?.length) break;
 
         for (const t of raw.list) {
@@ -522,31 +599,26 @@ export async function getExchangeClosedPnL(
   // Binance reports realised P&L through the futures income ledger, which —
   // unlike fetchMyTrades — does not need a symbol per call.
   if (ex === "binance") {
-    try {
-      const client = getCcxtClient(ex, credentials);
-      const entries = await client.fetchLedger(undefined, startTime, limit, {
-        incomeType: "REALIZED_PNL",
-      });
-      return entries.map((entry) => {
-        // parseLedgerEntry folds the sign into `direction` and keeps `amount`
-        // positive, so re-apply it here.
-        const magnitude = Number(entry.amount ?? 0);
-        const signed = entry.direction === "out" ? -magnitude : magnitude;
-        const info = entry.info as { symbol?: string };
-        return {
-          symbol: info?.symbol ? cleanSymbol(info.symbol) : "UNKNOWN",
-          closedPnl: String(signed),
-          cumEntryValue: "0",
-          leverage: "1",
-          closedSize: "0",
-          avgEntryPrice: "0",
-          createdTime: String(entry.timestamp ?? Date.now()),
-        };
-      });
-    } catch (error) {
-      console.error(`Fetching closed PnL from ${exchange} failed:`, error);
-      return [];
-    }
+    const client = getCcxtClient(ex, credentials);
+    const entries = await guarded(ex, client, () =>
+      client.fetchLedger(undefined, startTime, limit, { incomeType: "REALIZED_PNL" }),
+    );
+    return entries.map((entry) => {
+      // parseLedgerEntry folds the sign into `direction` and keeps `amount`
+      // positive, so re-apply it here.
+      const magnitude = Number(entry.amount ?? 0);
+      const signed = entry.direction === "out" ? -magnitude : magnitude;
+      const info = entry.info as { symbol?: string };
+      return {
+        symbol: info?.symbol ? cleanSymbol(info.symbol) : "UNKNOWN",
+        closedPnl: String(signed),
+        cumEntryValue: "0",
+        leverage: "1",
+        closedSize: "0",
+        avgEntryPrice: "0",
+        createdTime: String(entry.timestamp ?? Date.now()),
+      };
+    });
   }
 
   // Bitget's classic fills endpoint is disabled for Unified Accounts; the UTA
@@ -558,76 +630,66 @@ export async function getExchangeClosedPnL(
   // Gate fills carry no realised P&L; the position-close history does (net of
   // fees and funding), one row per closed position.
   if (ex === "gate") {
-    try {
-      const client = getCcxtClient(ex, credentials);
-      await client.loadMarkets();
-      const request: Record<string, unknown> = { settle: "usdt", limit: Math.min(limit, 1000) };
-      if (startTime !== undefined) request.from = Math.floor(startTime / 1000);
-      if (endTime !== undefined) request.to = Math.floor(endTime / 1000);
-      const rows = (await (client as unknown as {
-        privateFuturesGetSettlePositionClose: (req: Record<string, unknown>) => Promise<unknown>;
-      }).privateFuturesGetSettlePositionClose(request)) as Array<Record<string, unknown>>;
+    const client = getCcxtClient(ex, credentials);
+    await client.loadMarkets();
+    const request: Record<string, unknown> = { settle: "usdt", limit: Math.min(limit, 1000) };
+    if (startTime !== undefined) request.from = Math.floor(startTime / 1000);
+    if (endTime !== undefined) request.to = Math.floor(endTime / 1000);
+    const rows = (await (client as unknown as {
+      privateFuturesGetSettlePositionClose: (req: Record<string, unknown>) => Promise<unknown>;
+    }).privateFuturesGetSettlePositionClose(request)) as Array<Record<string, unknown>>;
 
-      return (rows ?? []).map((row) => {
-        const contract = String(row.contract ?? "UNKNOWN");
-        const market = client.safeMarket(contract, undefined, "_", "swap");
-        const contractSize = Number(market?.contractSize ?? 1) || 1;
-        // long_price is the open price of a long (close price of a short), and vice versa.
-        const entryPrice = Number(row.side === "long" ? row.long_price : row.short_price) || 0;
-        const closedSize = Math.abs(Number(row.accum_size ?? row.max_size ?? 0)) * contractSize;
-        return {
-          symbol: cleanSymbol(contract),
-          closedPnl: String(row.pnl ?? "0"),
-          cumEntryValue: String(closedSize * entryPrice),
-          leverage: "1",
-          closedSize: String(closedSize),
-          avgEntryPrice: String(entryPrice),
-          createdTime: String(Math.round(Number(row.time ?? 0) * 1000) || Date.now()),
-        };
-      });
-    } catch (error) {
-      console.error(`Fetching closed PnL from ${exchange} failed:`, error);
-      return [];
-    }
+    return (rows ?? []).map((row) => {
+      const contract = String(row.contract ?? "UNKNOWN");
+      const market = client.safeMarket(contract, undefined, "_", "swap");
+      const contractSize = Number(market?.contractSize ?? 1) || 1;
+      // long_price is the open price of a long (close price of a short), and vice versa.
+      const entryPrice = Number(row.side === "long" ? row.long_price : row.short_price) || 0;
+      const closedSize = Math.abs(Number(row.accum_size ?? row.max_size ?? 0)) * contractSize;
+      return {
+        symbol: cleanSymbol(contract),
+        closedPnl: String(row.pnl ?? "0"),
+        cumEntryValue: String(closedSize * entryPrice),
+        leverage: "1",
+        closedSize: String(closedSize),
+        avgEntryPrice: String(entryPrice),
+        createdTime: String(Math.round(Number(row.time ?? 0) * 1000) || Date.now()),
+      };
+    });
   }
 
   // For OKX: use CCXT fetchMyTrades
-  try {
-    const client = getCcxtClient(ex, credentials);
-    let trades: Trade[] = [];
+  const client = getCcxtClient(ex, credentials);
+  let trades: Trade[] = [];
 
-    if (client.has["fetchMyTrades"]) {
-      trades = await client.fetchMyTrades(undefined, startTime, limit);
-    }
-
-    const results: StandardClosedTrade[] = [];
-    for (const t of trades) {
-      const info = t.info as Record<string, unknown>;
-      // Look for realized PnL fields in various exchange trade objects
-      const pnl = Number(
-        info?.realizedPnl ?? info?.fillPnl ?? info?.pnl ?? t.fee?.cost ?? 0,
-      );
-      if (pnl === 0 && !info?.realizedPnl) continue;
-
-      const symbol = t.symbol ? cleanSymbol(t.symbol) : "UNKNOWN";
-      const notional = Number(t.cost ?? (Number(t.amount ?? 0) * Number(t.price ?? 0)));
-
-      results.push({
-        symbol,
-        closedPnl: String(pnl),
-        cumEntryValue: String(notional),
-        leverage: "1",
-        closedSize: String(t.amount ?? 0),
-        avgEntryPrice: String(t.price ?? 0),
-        createdTime: String(t.timestamp ?? Date.now()),
-      });
-    }
-
-    return results;
-  } catch (error) {
-    console.error(`Fetching closed PnL from ${exchange} failed:`, error);
-    return [];
+  if (client.has["fetchMyTrades"]) {
+    trades = await client.fetchMyTrades(undefined, startTime, limit);
   }
+
+  const results: StandardClosedTrade[] = [];
+  for (const t of trades) {
+    const info = t.info as Record<string, unknown>;
+    // Look for realized PnL fields in various exchange trade objects
+    const pnl = Number(
+      info?.realizedPnl ?? info?.fillPnl ?? info?.pnl ?? t.fee?.cost ?? 0,
+    );
+    if (pnl === 0 && !info?.realizedPnl) continue;
+
+    const symbol = t.symbol ? cleanSymbol(t.symbol) : "UNKNOWN";
+    const notional = Number(t.cost ?? (Number(t.amount ?? 0) * Number(t.price ?? 0)));
+
+    results.push({
+      symbol,
+      closedPnl: String(pnl),
+      cumEntryValue: String(notional),
+      leverage: "1",
+      closedSize: String(t.amount ?? 0),
+      avgEntryPrice: String(t.price ?? 0),
+      createdTime: String(t.timestamp ?? Date.now()),
+    });
+  }
+
+  return results;
 }
 
 

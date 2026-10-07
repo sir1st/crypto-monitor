@@ -155,6 +155,16 @@ Two modules, split by whether credentials are needed:
   rather than throwing, precisely so the multi-account fan-out can skip a bad
   account.
 
+**Exchange reads are cached and Binance is weight-guarded** (the dashboard shares
+its outbound IP with the copy-trading bot). `server/exchanges/cache.ts` caches
+`getExchangePositions` / `getExchangeWalletBalance` / `getExchangeClosedPnL` per
+account (30s / 60s / 120s), shares in-flight requests across tabs, and on failure
+serves the last good value and waits 10s before retrying — so the `*Uncached`
+fetchers in `manager.ts` must **throw** on failure, never return `[]`/`null`.
+`server/exchanges/binance-guard.ts` pauses all Binance calls once
+`x-mbx-used-weight-1m` exceeds 1000 (until the minute rolls) and on 429/418 (per
+`Retry-After`); wrap any new Binance ccxt call in `guarded()`.
+
 Credentials live per row in the `accounts` table. `storage.getTradableAccounts()`
 is the filter (`exchange === "bybit" && status === "active"` and both keys
 present). The `BYBIT_API_KEY` env pair is a single-account fallback used **only
