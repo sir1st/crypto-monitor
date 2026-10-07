@@ -107,6 +107,7 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     ref: "66668",
     accounts: [
       { exchange: "gate", accountId: "gateioswapu_hx4", detail: "1990U · ratio 5x · pending" },
+      { exchange: "gate", accountId: "gateioswapu_siji05", detail: "200U · ratio 5x · pending" },
     ],
   },
   {
