@@ -6,7 +6,7 @@ const traderUrl = (address: string, ref: string) =>
   `https://hyperx.trade/hyperliquid/trader?address=${address}&ref=${ref}`;
 
 interface ExchangeAccount {
-  exchange: "bybit" | "bitget" | "binance";
+  exchange: "bybit" | "bitget" | "binance" | "gate";
   accountId: string;
   /** Sizing note, e.g. "3000U · mirror 0.1x". */
   detail: string;
@@ -22,7 +22,9 @@ function exchangeBadgeStyle(exchange: string) {
   const ex = exchange.toLowerCase();
   return ex === "binance"
     ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
-    : ex === "bitget"
+    : ex === "gate"
+      ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+      : ex === "bitget"
       ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
       : "bg-orange-500/20 text-orange-400 border-orange-500/30";
 }
@@ -39,6 +41,7 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     accounts: [
       { exchange: "bybit", accountId: "bybitswapu_acct1", detail: "2620U · ratio 1x" },
       { exchange: "bitget", accountId: "bitget_acct1", detail: "300U · ratio 1x · force-min" },
+      { exchange: "gate", accountId: "gateioswapu_gq1", detail: "2270U · ratio 1x · pending" },
     ],
   },
   {
@@ -48,6 +51,7 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
       { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 1x" },
       { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 1x" },
       { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 1x · force-min" },
+      { exchange: "gate", accountId: "gateioswapu_gq2", detail: "2240U · ratio 1x · pending" },
     ],
   },
   {
@@ -56,6 +60,7 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     accounts: [
       { exchange: "bybit", accountId: "bybitswapu_acct3", detail: "1060U · ratio 1x" },
       { exchange: "bitget", accountId: "bitget_acct3", detail: "300U · ratio 1x · force-min" },
+      { exchange: "gate", accountId: "gateioswapu_gq4", detail: "2250U · ratio 0.5x · pending" },
     ],
   },
   {
@@ -73,6 +78,49 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     accounts: [
       { exchange: "bybit", accountId: "bybitswapu_acct5", detail: "3080U · ratio 2x" },
       { exchange: "bitget", accountId: "bitget_acct5", detail: "300U · ratio 2x · force-min" },
+      { exchange: "gate", accountId: "gateioswapu_gq3", detail: "2740U · ratio 2x · pending" },
+    ],
+  },
+  {
+    address: "0xb20af39c74a7b532221837397e510f5a28c41b05",
+    ref: "66668",
+    accounts: [
+      { exchange: "gate", accountId: "gateioswapu_hx1", detail: "1990U · ratio 1x · pending" },
+    ],
+  },
+  {
+    address: "0x15baf1cefcced43e971da85b7b4de5a0391f7b29",
+    ref: "66668",
+    accounts: [
+      { exchange: "gate", accountId: "gateioswapu_hx2", detail: "2030U · ratio 3x · pending" },
+    ],
+  },
+  {
+    address: "0xafe4b3fb69024f240dce32270dede23c85154a21",
+    ref: "66668",
+    accounts: [
+      { exchange: "gate", accountId: "gateioswapu_hx3", detail: "2020U · ratio 2x · pending" },
+    ],
+  },
+  {
+    address: "0xa4ac1d48fe393ac94e7f9480af8abd9360abf48a",
+    ref: "66668",
+    accounts: [
+      { exchange: "gate", accountId: "gateioswapu_hx4", detail: "1990U · ratio 5x · pending" },
+    ],
+  },
+  {
+    address: "0xac142fee46f8dacbfef23e1e41d79f1f7233487e",
+    ref: "66668",
+    accounts: [
+      { exchange: "gate", accountId: "gateioswapu_hx5", detail: "2010U · ratio 1x · pending" },
+    ],
+  },
+  {
+    address: "0xa4178e3b8d7799cd472ceeb63b302b4a1344da19",
+    ref: "66668",
+    accounts: [
+      { exchange: "bybit", accountId: "bybitswapu_acct6", detail: "78U · ratio 1x · pending" },
     ],
   },
 ];
