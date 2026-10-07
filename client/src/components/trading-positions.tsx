@@ -38,7 +38,60 @@ interface Position {
   cumRealisedPnl: string;
   updatedTime: string;
   accountName?: string;
+  accountId?: number;
   exchange?: string;
+}
+
+/** Shape returned by GET /api/accounts: credentials are stripped server-side. */
+type AccountSummary = Omit<Account, "apiKey" | "apiSecret" | "passphrase"> & {
+  hasCredentials: boolean;
+};
+
+interface AccountPnl {
+  key: string;
+  name: string;
+  positions: Position[];
+  pnl: number;
+  margin: number;
+}
+
+const toNumber = (value: string | undefined) => {
+  const num = parseFloat(value ?? "");
+  return Number.isFinite(num) ? num : 0;
+};
+
+// Margin-based, matching the ROI convention in server/trading.ts: value / leverage.
+const positionMargin = (position: Position) => {
+  const leverage = toNumber(position.leverage);
+  return leverage > 0 ? toNumber(position.positionValue) / leverage : 0;
+};
+
+const roiPercent = (pnl: number, margin: number) => (margin > 0 ? (pnl / margin) * 100 : null);
+
+/**
+ * One group per tradable account (same filter as storage.getTradableAccounts),
+ * so accounts with no open positions still show $0.00. Positions from an
+ * account not in that list (e.g. the env-credential fallback) get their own group.
+ */
+function groupByAccount(accounts: AccountSummary[], positions: Position[]): AccountPnl[] {
+  const groups = new Map<string, AccountPnl>();
+  for (const account of accounts) {
+    if (account.status !== "active" || !account.hasCredentials) continue;
+    groups.set(String(account.id), { key: String(account.id), name: account.name, positions: [], pnl: 0, margin: 0 });
+  }
+  for (const position of positions) {
+    const name = position.accountName || "Main Account";
+    const key = position.accountId != null ? String(position.accountId) : `name:${name}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { key, name, positions: [], pnl: 0, margin: 0 };
+      groups.set(key, group);
+    }
+    group.positions.push(position);
+    group.pnl += toNumber(position.unrealisedPnl);
+    group.margin += positionMargin(position);
+  }
+  return Array.from(groups.values());
 }
 
 export default function TradingPositions() {
@@ -46,7 +99,7 @@ export default function TradingPositions() {
   const [isFullScreen, setIsFullScreen] = useState(false);
 
   // Fetch all accounts
-  const { data: accounts = [], isLoading: accountsLoading } = useQuery<Account[]>({
+  const { data: accounts = [], isLoading: accountsLoading } = useQuery<AccountSummary[]>({
     queryKey: ['/api/accounts'],
     queryFn: async () => {
       const response = await apiRequest('GET', '/api/accounts');
@@ -201,6 +254,205 @@ export default function TradingPositions() {
     );
   }
 
+  const accountGroups = groupByAccount(accounts, positions);
+  const totalGroup: AccountPnl = {
+    key: "total",
+    name: "Total",
+    positions,
+    pnl: accountGroups.reduce((sum, g) => sum + g.pnl, 0),
+    margin: accountGroups.reduce((sum, g) => sum + g.margin, 0),
+  };
+
+  const formatSignedCurrency = (value: number) =>
+    `${value > 0 ? "+" : ""}${formatCurrency(value)}`;
+
+  const formatRoi = (roi: number | null) =>
+    roi === null ? "—" : `${roi > 0 ? "+" : ""}${roi.toFixed(2)}%`;
+
+  const renderPositionCard = (position: Position, index: number) => {
+    const isLong = position.side === "Buy";
+    const pnl = parseFloat(position.unrealisedPnl);
+    const isProfitable = pnl >= 0;
+    
+    return (
+      <motion.div
+        key={`${position.symbol}-${index}`}
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ delay: index * 0.1, type: "spring", stiffness: 100 }}
+        className={`relative overflow-hidden rounded-xl backdrop-blur-md border transition-all duration-500 hover:scale-[1.02] hover:shadow-2xl group cursor-pointer ${
+          isLong 
+            ? "bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border-emerald-500/30 shadow-emerald-500/10 hover:border-emerald-500/50 hover:shadow-emerald-500/20" 
+            : "bg-gradient-to-br from-red-500/10 to-red-600/5 border-red-500/30 shadow-red-500/10 hover:border-red-500/50 hover:shadow-red-500/20"
+        }`}
+      >
+        {/* Background glow effect */}
+        <div className={`absolute inset-0 opacity-20 ${
+          isLong ? "bg-emerald-500/5" : "bg-red-500/5"
+        }`} />
+        
+        {/* Content */}
+        <div className="relative p-2 sm:p-3 md:p-4 space-y-1.5 sm:space-y-2 md:space-y-3">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              {/* Crypto Logo */}
+              {position.symbol.includes('BTC') ? (
+                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#f7931a] flex items-center justify-center shadow-lg">
+                  <span className="text-white font-bold text-xs">₿</span>
+                </div>
+              ) : (
+                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#00b4d8]/20 border border-[#00b4d8]/30 flex items-center justify-center">
+                  <span className="text-[#00b4d8] font-bold text-xs">{position.symbol.charAt(0)}</span>
+                </div>
+              )}
+              <motion.div 
+                className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
+                  isLong ? "bg-emerald-400 shadow-emerald-400/50" : "bg-red-400 shadow-red-400/50"
+                }`}
+                animate={{
+                  boxShadow: isLong
+                    ? ["0 0 4px rgba(52, 211, 153, 0.5)", "0 0 8px rgba(52, 211, 153, 0.8)", "0 0 4px rgba(52, 211, 153, 0.5)"]
+                    : ["0 0 4px rgba(248, 113, 113, 0.5)", "0 0 8px rgba(248, 113, 113, 0.8)", "0 0 4px rgba(248, 113, 113, 0.5)"]
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+              />
+              <h3 className="text-sm sm:text-base md:text-lg font-bold text-white group-hover:text-white/90 transition-colors">{position.symbol}</h3>
+            </div>
+            <Badge 
+              variant="outline"
+              className={`text-xs font-semibold border-0 px-1.5 py-0.5 sm:px-2 ${
+                isLong 
+                  ? "bg-emerald-500/20 text-emerald-300" 
+                  : "bg-red-500/20 text-red-300"
+              }`}
+            >
+              {position.side}
+            </Badge>
+          </div>
+
+          {/* Account & Exchange Badge */}
+          <div className="flex items-center justify-between gap-1">
+            {position.exchange ? (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase border ${
+                position.exchange.toLowerCase() === 'binance' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+                position.exchange.toLowerCase() === 'okx' ? 'bg-white/10 text-white border-white/20' :
+                position.exchange.toLowerCase() === 'bitget' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' :
+                position.exchange.toLowerCase() === 'gate' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                'bg-orange-500/20 text-orange-400 border-orange-500/30'
+              }`}>
+                {position.exchange}
+              </span>
+            ) : <span />}
+            <div className="text-xs text-[#00b4d8] bg-[#00b4d8]/20 px-2 py-0.5 rounded-full border border-[#00b4d8]/30 truncate max-w-[120px]">
+              {position.accountName || 'Main Account'}
+            </div>
+          </div>
+
+          {/* Key Metrics */}
+          <div className="grid grid-cols-2 gap-1 sm:gap-2 md:gap-3 text-xs">
+            <div>
+              <span className="text-white/60 block text-xs">Size</span>
+              <span className="text-white font-medium text-xs sm:text-sm">{position.size}</span>
+            </div>
+            <div>
+              <span className="text-white/60 block text-xs">Leverage</span>
+              <span className="text-white font-medium text-xs sm:text-sm">{position.leverage}x</span>
+            </div>
+          </div>
+
+          {/* Prices */}
+          <div className="space-y-0.5 sm:space-y-1 md:space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-white/60 text-xs">Entry</span>
+              <span className="text-white font-mono text-xs">${formatPrice(position.avgPrice)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-white/60 text-xs">Mark</span>
+              <span className="text-white font-mono text-xs">${formatPrice(position.markPrice)}</span>
+            </div>
+          </div>
+
+          {/* PnL Display - Animated */}
+          <motion.div 
+            className={`p-1.5 sm:p-2 md:p-3 rounded-lg border ${
+              isProfitable 
+                ? "bg-emerald-500/10 border-emerald-500/30" 
+                : "bg-red-500/10 border-red-500/30"
+            }`}
+            animate={{
+              boxShadow: isProfitable 
+                ? ["0 0 0 rgba(16, 185, 129, 0)", "0 0 20px rgba(16, 185, 129, 0.3)", "0 0 0 rgba(16, 185, 129, 0)"]
+                : ["0 0 0 rgba(239, 68, 68, 0)", "0 0 20px rgba(239, 68, 68, 0.3)", "0 0 0 rgba(239, 68, 68, 0)"]
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+          >
+            <div className="space-y-0.5 sm:space-y-1 md:space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-white/70 text-xs">
+                  <span className="hidden sm:inline">Unrealized PnL</span>
+                  <span className="sm:hidden">PnL</span>
+                </span>
+                <motion.span 
+                  className={`font-bold text-xs sm:text-sm md:text-base font-mono ${
+                    isProfitable ? "text-emerald-300" : "text-red-300"
+                  }`}
+                  animate={{
+                    scale: [1, 1.05, 1],
+                  }}
+                  transition={{
+                    duration: 1.5,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                >
+                  {isProfitable ? "+" : ""}{formatCurrency(position.unrealisedPnl)}
+                </motion.span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-white/60 text-xs">PnL %</span>
+                <motion.span 
+                  className={`font-semibold text-xs font-mono ${
+                    isProfitable ? "text-emerald-300" : "text-red-300"
+                  }`}
+                  animate={{
+                    scale: [1, 1.03, 1],
+                  }}
+                  transition={{
+                    duration: 1.8,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                >
+                  {(() => {
+                    const entryPrice = parseFloat(position.avgPrice);
+                    const markPrice = parseFloat(position.markPrice);
+                    const leverage = parseFloat(position.leverage);
+                    
+                    if (entryPrice > 0 && markPrice > 0) {
+                      const priceChange = isLong ? markPrice - entryPrice : entryPrice - markPrice;
+                      const pnlPercent = (priceChange / entryPrice) * leverage * 100;
+                      return `${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(2)}%`;
+                    }
+                    return "0.00%";
+                  })()}
+                </motion.span>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </motion.div>
+    );
+  };
+
   const positionsContent = (
     <Card className={`bg-gradient-to-br from-[#0d2538] to-[#1a1a2e] border-[#00b4d8]/30 shadow-2xl shadow-[#00b4d8]/10 ${isFullScreen ? 'h-full' : ''}`}>
       <CardHeader className="p-4 sm:p-6">
@@ -240,6 +492,37 @@ export default function TradingPositions() {
         </div>
       </CardHeader>
       <CardContent className="p-3 sm:p-4 md:p-6">
+        {accountGroups.length > 0 && (
+          <div className="mb-4 sm:mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            {[totalGroup, ...accountGroups].map((group) => {
+              const isTotal = group === totalGroup;
+              const roi = roiPercent(group.pnl, group.margin);
+              return (
+                <div
+                  key={group.key}
+                  className={`rounded-lg border p-2 sm:p-3 ${
+                    isTotal ? "border-[#ffc107]/40 bg-[#ffc107]/10" : "border-[#00b4d8]/20 bg-[#00b4d8]/5"
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between gap-1">
+                    <span className={`truncate text-xs font-medium ${isTotal ? "text-[#ffc107]" : "text-white/80"}`}>
+                      {group.name}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-white/50">
+                      {group.positions.length} pos
+                    </span>
+                  </div>
+                  <div className={`font-mono text-sm sm:text-base font-bold ${getPnlColor(String(group.pnl))}`}>
+                    {formatSignedCurrency(group.pnl)}
+                  </div>
+                  <div className={`font-mono text-xs ${getPnlColor(String(group.pnl))}`}>
+                    {formatRoi(roi)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         {!positions || positions.length === 0 ? (
           <div className="text-center py-16 space-y-6">
             <motion.div 
@@ -271,194 +554,31 @@ export default function TradingPositions() {
             </motion.div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {positions.map((position, index) => {
-              const isLong = position.side === "Buy";
-              const pnl = parseFloat(position.unrealisedPnl);
-              const isProfitable = pnl >= 0;
-              
-              return (
-                <motion.div
-                  key={`${position.symbol}-${index}`}
-                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ delay: index * 0.1, type: "spring", stiffness: 100 }}
-                  className={`relative overflow-hidden rounded-xl backdrop-blur-md border transition-all duration-500 hover:scale-[1.02] hover:shadow-2xl group cursor-pointer ${
-                    isLong 
-                      ? "bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border-emerald-500/30 shadow-emerald-500/10 hover:border-emerald-500/50 hover:shadow-emerald-500/20" 
-                      : "bg-gradient-to-br from-red-500/10 to-red-600/5 border-red-500/30 shadow-red-500/10 hover:border-red-500/50 hover:shadow-red-500/20"
-                  }`}
-                >
-                  {/* Background glow effect */}
-                  <div className={`absolute inset-0 opacity-20 ${
-                    isLong ? "bg-emerald-500/5" : "bg-red-500/5"
-                  }`} />
-                  
-                  {/* Content */}
-                  <div className="relative p-2 sm:p-3 md:p-4 space-y-1.5 sm:space-y-2 md:space-y-3">
-                    {/* Header */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        {/* Crypto Logo */}
-                        {position.symbol.includes('BTC') ? (
-                          <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#f7931a] flex items-center justify-center shadow-lg">
-                            <span className="text-white font-bold text-xs">₿</span>
-                          </div>
-                        ) : (
-                          <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#00b4d8]/20 border border-[#00b4d8]/30 flex items-center justify-center">
-                            <span className="text-[#00b4d8] font-bold text-xs">{position.symbol.charAt(0)}</span>
-                          </div>
-                        )}
-                        <motion.div 
-                          className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
-                            isLong ? "bg-emerald-400 shadow-emerald-400/50" : "bg-red-400 shadow-red-400/50"
-                          }`}
-                          animate={{
-                            boxShadow: isLong
-                              ? ["0 0 4px rgba(52, 211, 153, 0.5)", "0 0 8px rgba(52, 211, 153, 0.8)", "0 0 4px rgba(52, 211, 153, 0.5)"]
-                              : ["0 0 4px rgba(248, 113, 113, 0.5)", "0 0 8px rgba(248, 113, 113, 0.8)", "0 0 4px rgba(248, 113, 113, 0.5)"]
-                          }}
-                          transition={{
-                            duration: 2,
-                            repeat: Infinity,
-                            ease: "easeInOut"
-                          }}
-                        />
-                        <h3 className="text-sm sm:text-base md:text-lg font-bold text-white group-hover:text-white/90 transition-colors">{position.symbol}</h3>
-                      </div>
-                      <Badge 
-                        variant="outline"
-                        className={`text-xs font-semibold border-0 px-1.5 py-0.5 sm:px-2 ${
-                          isLong 
-                            ? "bg-emerald-500/20 text-emerald-300" 
-                            : "bg-red-500/20 text-red-300"
-                        }`}
-                      >
-                        {position.side}
-                      </Badge>
-                    </div>
-
-                    {/* Account & Exchange Badge */}
-                    <div className="flex items-center justify-between gap-1">
-                      {position.exchange ? (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase border ${
-                          position.exchange.toLowerCase() === 'binance' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
-                          position.exchange.toLowerCase() === 'okx' ? 'bg-white/10 text-white border-white/20' :
-                          position.exchange.toLowerCase() === 'bitget' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' :
-                          position.exchange.toLowerCase() === 'gate' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
-                          'bg-orange-500/20 text-orange-400 border-orange-500/30'
-                        }`}>
-                          {position.exchange}
+          <div className="space-y-4 sm:space-y-6">
+            {accountGroups
+              .filter((group) => group.positions.length > 0)
+              .map((group) => {
+                const roi = roiPercent(group.pnl, group.margin);
+                return (
+                  <section key={group.key} className="space-y-2 sm:space-y-3">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[#00b4d8]/20 pb-1.5">
+                      <h3 className="text-sm sm:text-base font-semibold text-white">
+                        {group.name}
+                        <span className="ml-2 text-xs font-normal text-white/50">
+                          {group.positions.length} {group.positions.length === 1 ? "position" : "positions"}
                         </span>
-                      ) : <span />}
-                      <div className="text-xs text-[#00b4d8] bg-[#00b4d8]/20 px-2 py-0.5 rounded-full border border-[#00b4d8]/30 truncate max-w-[120px]">
-                        {position.accountName || 'Main Account'}
-                      </div>
+                      </h3>
+                      <span className={`font-mono text-sm font-semibold ${getPnlColor(String(group.pnl))}`}>
+                        {formatSignedCurrency(group.pnl)}
+                        <span className="ml-2 text-xs">{formatRoi(roi)}</span>
+                      </span>
                     </div>
-
-                    {/* Key Metrics */}
-                    <div className="grid grid-cols-2 gap-1 sm:gap-2 md:gap-3 text-xs">
-                      <div>
-                        <span className="text-white/60 block text-xs">Size</span>
-                        <span className="text-white font-medium text-xs sm:text-sm">{position.size}</span>
-                      </div>
-                      <div>
-                        <span className="text-white/60 block text-xs">Leverage</span>
-                        <span className="text-white font-medium text-xs sm:text-sm">{position.leverage}x</span>
-                      </div>
+                    <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {group.positions.map(renderPositionCard)}
                     </div>
-
-                    {/* Prices */}
-                    <div className="space-y-0.5 sm:space-y-1 md:space-y-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-white/60 text-xs">Entry</span>
-                        <span className="text-white font-mono text-xs">${formatPrice(position.avgPrice)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-white/60 text-xs">Mark</span>
-                        <span className="text-white font-mono text-xs">${formatPrice(position.markPrice)}</span>
-                      </div>
-                    </div>
-
-                    {/* PnL Display - Animated */}
-                    <motion.div 
-                      className={`p-1.5 sm:p-2 md:p-3 rounded-lg border ${
-                        isProfitable 
-                          ? "bg-emerald-500/10 border-emerald-500/30" 
-                          : "bg-red-500/10 border-red-500/30"
-                      }`}
-                      animate={{
-                        boxShadow: isProfitable 
-                          ? ["0 0 0 rgba(16, 185, 129, 0)", "0 0 20px rgba(16, 185, 129, 0.3)", "0 0 0 rgba(16, 185, 129, 0)"]
-                          : ["0 0 0 rgba(239, 68, 68, 0)", "0 0 20px rgba(239, 68, 68, 0.3)", "0 0 0 rgba(239, 68, 68, 0)"]
-                      }}
-                      transition={{
-                        duration: 2,
-                        repeat: Infinity,
-                        ease: "easeInOut"
-                      }}
-                    >
-                      <div className="space-y-0.5 sm:space-y-1 md:space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-white/70 text-xs">
-                            <span className="hidden sm:inline">Unrealized PnL</span>
-                            <span className="sm:hidden">PnL</span>
-                          </span>
-                          <motion.span 
-                            className={`font-bold text-xs sm:text-sm md:text-base font-mono ${
-                              isProfitable ? "text-emerald-300" : "text-red-300"
-                            }`}
-                            animate={{
-                              scale: [1, 1.05, 1],
-                            }}
-                            transition={{
-                              duration: 1.5,
-                              repeat: Infinity,
-                              ease: "easeInOut"
-                            }}
-                          >
-                            {isProfitable ? "+" : ""}{formatCurrency(position.unrealisedPnl)}
-                          </motion.span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-white/60 text-xs">PnL %</span>
-                          <motion.span 
-                            className={`font-semibold text-xs font-mono ${
-                              isProfitable ? "text-emerald-300" : "text-red-300"
-                            }`}
-                            animate={{
-                              scale: [1, 1.03, 1],
-                            }}
-                            transition={{
-                              duration: 1.8,
-                              repeat: Infinity,
-                              ease: "easeInOut"
-                            }}
-                          >
-                            {(() => {
-                              const entryPrice = parseFloat(position.avgPrice);
-                              const markPrice = parseFloat(position.markPrice);
-                              const leverage = parseFloat(position.leverage);
-                              
-                              if (entryPrice > 0 && markPrice > 0) {
-                                const priceChange = isLong ? markPrice - entryPrice : entryPrice - markPrice;
-                                const pnlPercent = (priceChange / entryPrice) * leverage * 100;
-                                return `${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(2)}%`;
-                              }
-                              return "0.00%";
-                            })()}
-                          </motion.span>
-                        </div>
-                      </div>
-                    </motion.div>
-
-
-
-
-                  </div>
-                </motion.div>
-              );
-            })}
+                  </section>
+                );
+              })}
           </div>
         )}
       </CardContent>
