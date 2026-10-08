@@ -94,7 +94,7 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     accounts: [
       { exchange: "gate", accountId: "gateioswapu_hx4", detail: "1990U · ratio 5x", status: "pending" },
       { exchange: "gate", accountId: "gateioswapu_siji05", detail: "200U · ratio 5x · force-min", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_gateb", detail: "200U · ratio 5x · force-min · maker→taker", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_gateb", detail: "200U · ratio 5x · force-min · maker open/add, taker exit", status: "live" },
       { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 3x · force-min", status: "live" },
       { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 3x · force-min", status: "live" },
       { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 3x · force-min", status: "live" },
@@ -170,16 +170,36 @@ function sortedAccounts(accounts: ExchangeAccount[]): ExchangeAccount[] {
   );
 }
 
+const compareAccountIds = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+
+/** Rank by exchange (Bybit, then Gate), then by that exchange's first account id. */
+const ADDRESS_ORDER_EXCHANGES: ExchangeAccount["exchange"][] = ["bybit", "gate"];
+
+function addressSortKey(mapping: AccountAddressMapping): [number, string] {
+  for (const [rank, exchange] of ADDRESS_ORDER_EXCHANGES.entries()) {
+    const ids = mapping.accounts
+      .filter((account) => account.exchange === exchange)
+      .map((account) => account.accountId)
+      .sort(compareAccountIds);
+    if (ids.length > 0) return [rank, ids[0]];
+  }
+  return [ADDRESS_ORDER_EXCHANGES.length, ""];
+}
+
+/** Addresses in Bybit account order (acct1, acct2, …), then Gate-only ones in Gate account order. */
+function sortedMappings(mappings: AccountAddressMapping[]): AccountAddressMapping[] {
+  return [...mappings].sort((a, b) => {
+    const [rankA, idA] = addressSortKey(a);
+    const [rankB, idB] = addressSortKey(b);
+    return rankA - rankB || compareAccountIds(idA, idB);
+  });
+}
+
 export default function AccountAddressMap() {
   const all = ACCOUNT_ADDRESS_MAPPINGS.flatMap((mapping) => mapping.accounts);
   const liveCount = all.filter((account) => account.status === "live").length;
   const pendingCount = all.length - liveCount;
-  // Addresses with at least one live account first.
-  const mappings = [...ACCOUNT_ADDRESS_MAPPINGS].sort(
-    (a, b) =>
-      Number(!a.accounts.some((x) => x.status === "live")) -
-      Number(!b.accounts.some((x) => x.status === "live")),
-  );
+  const mappings = sortedMappings(ACCOUNT_ADDRESS_MAPPINGS);
 
   return (
     <Card className="bg-[#0d2538] border-[#00b4d8]/20">
