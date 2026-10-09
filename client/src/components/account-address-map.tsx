@@ -43,7 +43,6 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     accounts: [
       { exchange: "bybit", accountId: "bybitswapu_acct1", detail: "2620U · ratio 1x", status: "live" },
       { exchange: "bitget", accountId: "bitget_acct1", detail: "300U · ratio 1x · force-min", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_gq1", detail: "2270U · ratio 1x", status: "pending" },
     ],
   },
   {
@@ -52,7 +51,6 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     accounts: [
       { exchange: "bybit", accountId: "bybitswapu_acct3", detail: "1060U · ratio 1x", status: "live" },
       { exchange: "bitget", accountId: "bitget_acct3", detail: "300U · ratio 1x · force-min", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_gq4", detail: "2250U · ratio 0.5x", status: "pending" },
     ],
   },
   {
@@ -61,51 +59,26 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     accounts: [
       { exchange: "bybit", accountId: "bybitswapu_acct5", detail: "3080U · ratio 2x", status: "live" },
       { exchange: "bitget", accountId: "bitget_acct5", detail: "300U · ratio 2x · force-min", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_gq3", detail: "2740U · ratio 2x", status: "pending" },
-    ],
-  },
-  {
-    address: "0xb20af39c74a7b532221837397e510f5a28c41b05",
-    ref: "66668",
-    accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx1", detail: "1990U · ratio 1x", status: "pending" },
     ],
   },
   {
     address: "0x15baf1cefcced43e971da85b7b4de5a0391f7b29",
     ref: "66668",
     accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx2", detail: "2030U · ratio 3x", status: "pending" },
-      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3030U · ratio 2x · force-min", status: "live" },
       { exchange: "binance", accountId: "binance_acct2", detail: "680U · ratio 2x · force-min", status: "live" },
       { exchange: "bitget", accountId: "bitget_acct4", detail: "300U · ratio 2x · force-min", status: "live" },
-    ],
-  },
-  {
-    address: "0xafe4b3fb69024f240dce32270dede23c85154a21",
-    ref: "66668",
-    accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx3", detail: "2020U · ratio 2x", status: "pending" },
     ],
   },
   {
     address: "0xa4ac1d48fe393ac94e7f9480af8abd9360abf48a",
     ref: "66668",
     accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx4", detail: "1990U · ratio 5x", status: "pending" },
-      { exchange: "gate", accountId: "gateioswapu_siji05", detail: "200U · ratio 5x · force-min", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_gateb", detail: "200U · ratio 5x · force-min · maker open/add, taker exit", status: "live" },
-      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 3x · force-min", status: "live" },
-      { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 3x · force-min", status: "live" },
-      { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 3x · force-min", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_gq2", detail: "2240U · ratio 3x", status: "pending" },
-    ],
-  },
-  {
-    address: "0xac142fee46f8dacbfef23e1e41d79f1f7233487e",
-    ref: "66668",
-    accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx5", detail: "2010U · ratio 1x", status: "pending" },
+      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 5x · force-min", status: "live" },
+      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3030U · ratio 5x · force-min", status: "live" },
+      { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 5x · force-min", status: "live" },
+      { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 5x · force-min", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_hx1", detail: "10000U · ratio 7x · maker open/add, taker exit", status: "pending" },
+      { exchange: "gate", accountId: "gateioswapu_gq1", detail: "10000U · ratio 7x", status: "pending" },
     ],
   },
   {
