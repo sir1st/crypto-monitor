@@ -82,10 +82,18 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     ],
   },
   {
+    address: "0x121c93d3accf50bab046fe499fcefc07fbe6386a",
+    ref: "66668",
+    accounts: [
+      { exchange: "gate", accountId: "gateioswapu_siji05", detail: "200U · ratio 2x · force-min", status: "live" },
+    ],
+  },
+  {
     address: "0xa4178e3b8d7799cd472ceeb63b302b4a1344da19",
     ref: "66668",
     accounts: [
       { exchange: "bybit", accountId: "bybitswapu_acct6", detail: "78U · ratio 1x", status: "pending" },
+      { exchange: "gate", accountId: "gateioswapu_gateb", detail: "200U · ratio 2x · force-min", status: "live" },
     ],
   },
 ];
