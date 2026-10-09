@@ -36,6 +36,17 @@ function ratio(winPnl: number, lossPnl: number): number | null {
   return lossPnl !== 0 ? round2(Math.abs(winPnl / lossPnl)) : null;
 }
 
+/**
+ * Warm ccxt market caches one at a time before fanning out: Bitget 429s on
+ * concurrent public calls, which would otherwise drop accounts. Cheap once
+ * warm (markets are shared per exchange).
+ */
+async function warmClients(accounts: Account[]): Promise<void> {
+  for (const account of accounts) {
+    await preloadExchangeClient(account.exchange, credentialsFor(account));
+  }
+}
+
 function credentialsFor(account: Account): ExchangeCredentials {
   return {
     apiKey: account.apiKey,
@@ -93,17 +104,16 @@ function marginOf(trade: ClosedTrade): number {
  */
 export async function aggregatePositions(_category: "linear" | "inverse" = "linear"): Promise<StandardPosition[]> {
   const accounts = await storage.getTradableAccounts();
-  const positions: StandardPosition[] = [];
+  await warmClients(accounts);
 
-  for (const account of accounts) {
-    const list = await getExchangePositions(
-      account.exchange,
-      credentialsFor(account),
-      account.name,
-      account.id,
-    );
-    positions.push(...list);
-  }
+  // Accounts carry independent credentials, so fetch them concurrently; a slow
+  // one must not serialise the rest.
+  const lists = await Promise.all(
+    accounts.map((account) =>
+      getExchangePositions(account.exchange, credentialsFor(account), account.name, account.id),
+    ),
+  );
+  const positions: StandardPosition[] = lists.flat();
 
   // Fallback to Bybit environment credentials if no DB accounts
   if (accounts.length === 0 && process.env.BYBIT_API_KEY && process.env.BYBIT_API_SECRET) {
@@ -125,13 +135,14 @@ export async function aggregateWalletBalances() {
   const accounts = await storage.getTradableAccounts();
   const balances: Array<Record<string, unknown>> = [];
 
-  for (const account of accounts) {
-    const wallet = await getExchangeWalletBalance(
-      account.exchange,
-      credentialsFor(account),
-      account.name,
-      account.id,
-    );
+  await warmClients(accounts);
+  const wallets = await Promise.all(
+    accounts.map((account) =>
+      getExchangeWalletBalance(account.exchange, credentialsFor(account), account.name, account.id),
+    ),
+  );
+
+  for (const wallet of wallets) {
     if (wallet) {
       balances.push({
         ...wallet,
@@ -533,11 +544,7 @@ export async function buildAccountBalanceReports(): Promise<AccountBalanceReport
   const { start: weekStart } = weekBoundaries();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  // Warm ccxt market caches one at a time: Bitget 429s on concurrent public
-  // calls, which would otherwise drop accounts from the fan-out below.
-  for (const account of accounts) {
-    await preloadExchangeClient(account.exchange, credentialsFor(account));
-  }
+  await warmClients(accounts);
 
   // Accounts carry independent credentials, so a slow or failing one must not
   // serialise the rest.

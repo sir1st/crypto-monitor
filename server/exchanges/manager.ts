@@ -20,6 +20,32 @@ interface ClientCacheEntry {
 
 const clientCache = new Map<string, ClientCacheEntry>();
 
+interface MarketCacheEntry {
+  markets: Exchange["markets"];
+  currencies: Exchange["currencies"];
+  loadedAt: number;
+}
+
+/**
+ * Market metadata is public and identical for every account on an exchange, so
+ * it is loaded once per exchange and seeded into each client. Rebuilt clients
+ * reuse it instead of re-downloading (Gate/Binance/Bitget lists are large and
+ * a cold reload across every account stalled the dashboard for ~50s).
+ */
+const marketCache = new Map<string, MarketCacheEntry>();
+const MARKETS_TTL_MS = 3600_000;
+const marketLoads = new Map<string, Promise<void>>();
+
+/** Which shared market snapshot each client was last seeded with. */
+const seededAt = new WeakMap<Exchange, number>();
+
+function seedMarkets(client: Exchange, entry: MarketCacheEntry): void {
+  if (seededAt.get(client) === entry.loadedAt) return;
+  // ccxt types `currencies` as undefined but accepts a currency map.
+  client.setMarkets(entry.markets, entry.currencies as never);
+  seededAt.set(client, entry.loadedAt);
+}
+
 /** Bybit rejects a closed-P&L range wider than 7 days. */
 const BYBIT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const BYBIT_PAGE_LIMIT = 100;
@@ -116,6 +142,9 @@ export function getCcxtClient(exchange: SupportedExchange | string, credentials?
       break;
   }
 
+  const shared = marketCache.get(ex);
+  if (shared) seedMarkets(client, shared);
+
   clientCache.set(cacheKey, { client, createdAt: Date.now() });
   return client;
 }
@@ -134,7 +163,26 @@ export async function preloadExchangeClient(
   try {
     const ex = exchange.toLowerCase();
     const client = getCcxtClient(ex, credentials);
-    await guarded(ex, client, () => client.loadMarkets());
+    const shared = marketCache.get(ex);
+    if (shared && Date.now() - shared.loadedAt < MARKETS_TTL_MS) {
+      seedMarkets(client, shared);
+      return;
+    }
+
+    // One reload per exchange; concurrent warmers wait on it.
+    let load = marketLoads.get(ex);
+    if (!load) {
+      load = (async () => {
+        await guarded(ex, client, () => client.loadMarkets(true));
+        const loadedAt = Date.now();
+        marketCache.set(ex, { markets: client.markets, currencies: client.currencies, loadedAt });
+        seededAt.set(client, loadedAt);
+      })().finally(() => marketLoads.delete(ex));
+      marketLoads.set(ex, load);
+    }
+    await load;
+    const fresh = marketCache.get(ex);
+    if (fresh) seedMarkets(client, fresh);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Preloading ${exchange} markets failed: ${message}`);
