@@ -73,12 +73,12 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     address: "0xa4ac1d48fe393ac94e7f9480af8abd9360abf48a",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 5x · force-min", status: "live" },
-      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3030U · ratio 5x · force-min", status: "live" },
-      { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 5x · force-min", status: "live" },
-      { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 5x · force-min", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_hx1", detail: "10000U · ratio 7x · maker open/add, taker exit", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_gq1", detail: "10000U · ratio 7x", status: "live" },
+      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 3x · force-min", status: "live" },
+      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3030U · ratio 3x · force-min", status: "live" },
+      { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 3x · force-min", status: "live" },
+      { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 3x · force-min", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_hx1", detail: "10000U · ratio 5x · maker open/add, taker exit", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_gq1", detail: "10000U · ratio 5x", status: "live" },
     ],
   },
   {
