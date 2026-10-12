@@ -79,9 +79,9 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
       { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 3x · force-min", status: "live" },
       { exchange: "gate", accountId: "gateioswapu_hx1_sj", detail: "10000U · ratio 5x · maker open/add, taker exit", status: "pending" },
       { exchange: "gate", accountId: "gateioswapu_gq1_wk", detail: "10000U · ratio 5x", status: "pending" },
-      { exchange: "gate", accountId: "gateioswapu_hx2_sj", detail: "100U · ratio 5x · deviation 2%", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_hx3_sj", detail: "100U · ratio 5x · exit 60s", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_hx4_sj", detail: "100U · ratio 5x · deviation 2% · exit 60s", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_hx2_sj", detail: "100U · ratio 5x · force-min · deviation 2%", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_hx3_sj", detail: "100U · ratio 5x · force-min · exit 60s", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_hx4_sj", detail: "100U · ratio 5x · force-min · deviation 2% · exit 60s", status: "live" },
     ],
   },
   {
