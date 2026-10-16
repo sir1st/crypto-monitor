@@ -67,21 +67,20 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     accounts: [
       { exchange: "binance", accountId: "binance_acct2", detail: "680U · ratio 2x · force-min", status: "live" },
       { exchange: "bitget", accountId: "bitget_acct4", detail: "300U · ratio 2x · force-min", status: "live" },
+      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 3x · force-min", status: "live" },
+      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3030U · ratio 3x · force-min", status: "live" },
+      { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 3x · force-min", status: "live" },
+      { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 3x · force-min", status: "live" },
     ],
   },
   {
     address: "0xa4ac1d48fe393ac94e7f9480af8abd9360abf48a",
     ref: "66668",
     accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1110U · ratio 3x · force-min", status: "live" },
-      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3030U · ratio 3x · force-min", status: "live" },
-      { exchange: "binance", accountId: "binance_acct1", detail: "640U · ratio 3x · force-min", status: "live" },
-      { exchange: "bitget", accountId: "bitget_acct2", detail: "300U · ratio 3x · force-min", status: "live" },
       { exchange: "gate", accountId: "gateioswapu_hx1_sj", detail: "10000U · ratio 5x · maker open/add, taker exit", status: "pending" },
       { exchange: "gate", accountId: "gateioswapu_gq1_wk", detail: "10000U · ratio 5x", status: "pending" },
       { exchange: "gate", accountId: "gateioswapu_hx2_sj", detail: "100U · ratio 5x · force-min · deviation 2%", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_hx3_sj", detail: "100U · ratio 5x · force-min · exit 60s", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_hx4_sj", detail: "100U · ratio 5x · force-min · deviation 2% · exit 60s", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_hx3_sj", detail: "100U · ratio 5x · force-min · deviation 2% · exit 60s", status: "live" },
     ],
   },
   {
