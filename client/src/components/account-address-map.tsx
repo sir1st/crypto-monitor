@@ -77,8 +77,8 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     address: "0xa4ac1d48fe393ac94e7f9480af8abd9360abf48a",
     ref: "66668",
     accounts: [
-      { exchange: "gate", accountId: "gateioswapu_hx1_sj", detail: "10000U · ratio 5x · maker open/add, taker exit", status: "pending" },
-      { exchange: "gate", accountId: "gateioswapu_gq1_wk", detail: "10000U · ratio 5x", status: "pending" },
+      { exchange: "gate", accountId: "gateioswapu_hx1_sj", detail: "10000U · ratio 1x · maker open/add, taker exit · deviation 2%", status: "live" },
+      { exchange: "gate", accountId: "gateioswapu_gq1_wk", detail: "10000U · ratio 1x · deviation 2%", status: "live" },
       { exchange: "gate", accountId: "gateioswapu_hx2_sj", detail: "100U · ratio 5x · force-min · deviation 2%", status: "live" },
       { exchange: "gate", accountId: "gateioswapu_hx3_sj", detail: "100U · ratio 5x · force-min · deviation 2% · exit 60s", status: "live" },
     ],
