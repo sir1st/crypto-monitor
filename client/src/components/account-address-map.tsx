@@ -38,14 +38,6 @@ function exchangeBadgeStyle(exchange: string) {
  */
 const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
   {
-    address: "0xed1c710ad28e9aca013178a4e8d43a580b4b0dbf",
-    ref: "66668",
-    accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct1", detail: "2620U · ratio 1x", status: "live" },
-      { exchange: "bitget", accountId: "bitget_acct1", detail: "300U · ratio 1x · force-min", status: "live" },
-    ],
-  },
-  {
     address: "0x61e9e0b9ea92e21709115425569feba8d3f0f5ab",
     ref: "66668",
     accounts: [
@@ -67,6 +59,8 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
       { exchange: "bitget", accountId: "bitget_acct5", detail: "300U · ratio 3x · force-min", status: "live" },
       { exchange: "gate", accountId: "gateioswapu_gq1_wk", detail: "10000U · ratio 2x", status: "live" },
       { exchange: "gate", accountId: "gateioswapu_hx1_sj", detail: "10000U · ratio 2x", status: "live" },
+      { exchange: "bybit", accountId: "bybitswapu_acct1", detail: "2620U · ratio 3x · force-min", status: "live" },
+      { exchange: "bitget", accountId: "bitget_acct1", detail: "300U · ratio 3x · force-min", status: "live" },
     ],
   },
   {
