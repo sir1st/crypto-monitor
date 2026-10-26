@@ -71,14 +71,6 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
       { exchange: "gate", accountId: "gateioswapu_hx3_sj", detail: "95U · ratio 5x · force-min · deviation 2% · exit 60s", status: "live" },
     ],
   },
-  {
-    address: "0xa4178e3b8d7799cd472ceeb63b302b4a1344da19",
-    ref: "66668",
-    accounts: [
-      { exchange: "bybit", accountId: "bybitswapu_acct6", detail: "78U · ratio 1x", status: "pending" },
-      { exchange: "gate", accountId: "gateioswapu_gateb", detail: "199U · ratio 2x · force-min", status: "live" },
-    ],
-  },
 ];
 
 function StatusBadge({ status }: { status: ExchangeAccount["status"] }) {
