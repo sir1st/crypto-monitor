@@ -46,6 +46,13 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
     ],
   },
   {
+    address: "0xf97ad6704baec104d00b88e0c157e2b7b3a1ddd1",
+    ref: "66668",
+    accounts: [
+      { exchange: "bybit", accountId: "bybitswapu_acct6", detail: "7132.38U · ratio 2x · force-min · blacklist HYPE", status: "pending" },
+    ],
+  },
+  {
     address: "0x15baf1cefcced43e971da85b7b4de5a0391f7b29",
     ref: "66668",
     accounts: [
