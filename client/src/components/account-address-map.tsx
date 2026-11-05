@@ -67,7 +67,7 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
       { exchange: "gate", accountId: "gateioswapu_hx1_sj", detail: "9506U · ratio 4x", status: "live" },
       { exchange: "bybit", accountId: "bybitswapu_acct1", detail: "2102U · ratio 4x · force-min", status: "live" },
       { exchange: "bitget", accountId: "bitget_acct1", detail: "465U · ratio 4x · force-min", status: "live" },
-      { exchange: "bybit", accountId: "bybitswapu_acct3", detail: "1060U · ratio 5x · force-min", status: "live" },
+      { exchange: "bybit", accountId: "bybitswapu_acct3", detail: "320.55U · ratio 5x · force-min", status: "live" },
     ],
   },
 ];
