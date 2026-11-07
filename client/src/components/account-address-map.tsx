@@ -51,25 +51,6 @@ const ACCOUNT_ADDRESS_MAPPINGS: AccountAddressMapping[] = [
       { exchange: "bybit", accountId: "bybitswapu_acct6", detail: "7132.38U · ratio 1x · force-min", status: "live" },
     ],
   },
-  {
-    address: "0x15baf1cefcced43e971da85b7b4de5a0391f7b29",
-    ref: "66668",
-    accounts: [
-      { exchange: "binance", accountId: "binance_acct2", detail: "747U · ratio 2x · force-min", status: "live" },
-      { exchange: "bitget", accountId: "bitget_acct4", detail: "336U · ratio 2x · force-min", status: "live" },
-      { exchange: "bybit", accountId: "bybitswapu_acct2", detail: "1202U · ratio 2x · force-min", status: "live" },
-      { exchange: "bybit", accountId: "bybitswapu_acct4", detail: "3203U · ratio 2x · force-min", status: "live" },
-      { exchange: "binance", accountId: "binance_acct1", detail: "706U · ratio 2x · force-min", status: "live" },
-      { exchange: "bitget", accountId: "bitget_acct2", detail: "383U · ratio 2x · force-min", status: "live" },
-      { exchange: "bybit", accountId: "bybitswapu_acct5", detail: "3333U · ratio 2x · force-min", status: "live" },
-      { exchange: "bitget", accountId: "bitget_acct5", detail: "398U · ratio 2x · force-min", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_gq1_wk", detail: "9400U · ratio 2x", status: "live" },
-      { exchange: "gate", accountId: "gateioswapu_hx1_sj", detail: "9506U · ratio 2x", status: "live" },
-      { exchange: "bybit", accountId: "bybitswapu_acct1", detail: "2102U · ratio 2x · force-min", status: "live" },
-      { exchange: "bitget", accountId: "bitget_acct1", detail: "465U · ratio 2x · force-min", status: "live" },
-      { exchange: "bybit", accountId: "bybitswapu_acct3", detail: "320.55U · ratio 2x · force-min", status: "live" },
-    ],
-  },
 ];
 
 function StatusBadge({ status }: { status: ExchangeAccount["status"] }) {
